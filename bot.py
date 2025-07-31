@@ -1368,6 +1368,13 @@ class Music(commands.Cog):
             await ctx.invoke(self._join)
 
         async with ctx.typing():
+            # Check for unsupported URLs first
+            if search.startswith(('http://', 'https://')):
+                is_unsupported, error_msg = self._is_unsupported_url(search)
+                if is_unsupported:
+                    await ctx.send(error_msg)
+                    return
+            
             # Check if it's a playlist URL (YouTube or YouTube Music)
             if search.startswith(('http://', 'https://')) and self._is_playlist_url(search):
                 try:
@@ -1459,6 +1466,35 @@ class Music(commands.Cog):
         # Create new audio player task
         voice_state.audio_player = ctx.bot.loop.create_task(voice_state.audio_player_task())
     
+    def _is_unsupported_url(self, url: str) -> tuple[bool, str]:
+        """Check if URL is from an unsupported service and return helpful message"""
+        url_lower = url.lower()
+        
+        # DRM-protected music services
+        if 'open.spotify.com' in url_lower or 'spotify.com' in url_lower:
+            return True, "🚫 **Spotify tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`\n• Contoh: `?play bad habits ed sheeran`"
+            
+        elif 'music.apple.com' in url_lower or 'itunes.apple.com' in url_lower:
+            return True, "🚫 **Apple Music tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`"
+            
+        elif 'tidal.com' in url_lower:
+            return True, "🚫 **Tidal tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`"
+            
+        elif 'deezer.com' in url_lower:
+            return True, "🚫 **Deezer tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`"
+            
+        elif 'music.amazon.com' in url_lower or 'amazon.com/music' in url_lower:
+            return True, "🚫 **Amazon Music tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`"
+            
+        # Other potentially problematic services
+        elif 'netflix.com' in url_lower:
+            return True, "🚫 **Netflix tidak didukung** - ini adalah layanan video streaming.\n\n✅ **Bot ini untuk musik/audio:**\n• YouTube: `?play [lagu/video]`\n• SoundCloud: `?play [soundcloud link]`"
+            
+        elif 'hulu.com' in url_lower or 'disney' in url_lower:
+            return True, "🚫 **Video streaming services tidak didukung**.\n\n✅ **Bot ini untuk musik/audio:**\n• YouTube: `?play [lagu/video]`\n• SoundCloud: `?play [soundcloud link]`"
+            
+        return False, ""
+
     def _is_playlist_url(self, url: str) -> bool:
         """Check if URL is a playlist from YouTube or YouTube Music"""
         url = url.lower()
@@ -1565,16 +1601,16 @@ async def help_command(ctx):
         name="🎵 **Music Commands**",
         value=f"""
 `{PREFIX}play <song/url/playlist>` - Play music or playlist (⚡ Fast concurrent loading)
-`{PREFIX}pause` - Pause current song
-`{PREFIX}resume` - Resume paused song
-`{PREFIX}skip` - Skip current song
-`{PREFIX}stop` - Stop music and clear queue
-`{PREFIX}queue` - Show music queue
-`{PREFIX}now` - Show currently playing song
+        `{PREFIX}pause` - Pause current song
+        `{PREFIX}resume` - Resume paused song
+        `{PREFIX}skip` - Skip current song
+        `{PREFIX}stop` - Stop music and clear queue
+        `{PREFIX}queue` - Show music queue
+        `{PREFIX}now` - Show currently playing song
 `{PREFIX}volume [1-100]` - Set/check volume
-`{PREFIX}loop` - Toggle loop mode
-`{PREFIX}shuffle` - Shuffle queue
-`{PREFIX}remove <number>` - Remove song from queue
+        `{PREFIX}loop` - Toggle loop mode
+        `{PREFIX}shuffle` - Shuffle queue
+        `{PREFIX}remove <number>` - Remove song from queue
 `{PREFIX}playlist` - Show playlist status
         """,
         inline=False
@@ -1583,9 +1619,9 @@ async def help_command(ctx):
     embed.add_field(
         name="🔧 **Voice Commands**",
         value=f"""
-`{PREFIX}join` - Join your voice channel
-`{PREFIX}leave` - Leave voice channel
-`{PREFIX}summon <channel>` - Join specific channel
+        `{PREFIX}join` - Join your voice channel
+        `{PREFIX}leave` - Leave voice channel
+        `{PREFIX}summon <channel>` - Join specific channel
         """,
         inline=False
     )
@@ -1595,6 +1631,18 @@ async def help_command(ctx):
         value=f"""
 `{PREFIX}debug` - Show bot status and diagnostics
 `{PREFIX}fix` - Restart audio player if stuck
+`{PREFIX}platforms` - Show supported platforms & alternatives
+        """,
+        inline=False
+    )
+    
+    embed.add_field(
+        name="✅ **Supported Platforms**",
+        value="""
+**✅ Supported:** YouTube, YouTube Music, SoundCloud, Bandcamp, Vimeo, TikTok
+**❌ Not Supported:** Spotify, Apple Music, Tidal, Deezer (DRM protected)
+
+*For unsupported platforms: copy song name and search instead!*
         """,
         inline=False
     )
@@ -1603,11 +1651,85 @@ async def help_command(ctx):
         name="📝 **Examples**",
         value=f"""
 `{PREFIX}play never gonna give you up`
-`{PREFIX}play https://www.youtube.com/watch?v=...`
+        `{PREFIX}play https://www.youtube.com/watch?v=...`
 `{PREFIX}play https://www.youtube.com/playlist?list=...` *(⚡ fast-loads)*
 `{PREFIX}play https://music.youtube.com/playlist?list=...` *(⚡ YouTube Music)*
 `{PREFIX}queue 2` *(page 2)* • `{PREFIX}playlist` *(status)*
 `{PREFIX}volume 50` • `{PREFIX}volume` *(check)* • `{PREFIX}skip`
+        """,
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='platforms', aliases=['sites', 'support'])
+async def supported_platforms(ctx):
+    """Shows detailed information about supported platforms."""
+    embed = discord.Embed(
+        title="🌐 Supported Audio Platforms",
+        description="Berikut platform yang didukung dan tidak didukung oleh bot:",
+        color=discord.Color.green()
+    )
+    
+    embed.add_field(
+        name="✅ **DIDUKUNG (Gratis)**",
+        value="""
+**🎵 Music Platforms:**
+• **YouTube** - Semua video/musik
+• **YouTube Music** - Playlist & single songs
+• **SoundCloud** - Public tracks
+• **Bandcamp** - Free tracks
+• **Vimeo** - Audio/video content
+
+**📱 Social Media:**
+• **TikTok** - Public videos
+• **Twitter/X** - Video dengan audio
+• **Facebook** - Public videos
+
+**📻 Other:**
+• **Internet Radio** - Stream URLs
+• **Mixcloud** - DJ sets & radio shows
+        """,
+        inline=True
+    )
+    
+    embed.add_field(
+        name="❌ **TIDAK DIDUKUNG**",
+        value="""
+**🔒 DRM-Protected Services:**
+• **Spotify** - Premium & DRM
+• **Apple Music** - DRM protected  
+• **Tidal** - High-quality DRM
+• **Deezer** - Subscription service
+• **Amazon Music** - DRM protected
+• **YouTube Music Premium** - DRM tracks
+
+**📺 Video Streaming:**
+• **Netflix** - DRM protected
+• **Disney+** - DRM protected
+• **Hulu** - DRM protected
+
+**💡 Alasan:** DRM encryption mencegah ekstraksi audio
+        """,
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🔄 **Cara Menggunakan Platform Tidak Didukung**",
+        value=f"""
+**Step 1:** Copy nama lagu dari platform yang tidak didukung
+**Step 2:** Search di YouTube dengan bot:
+
+**Contoh:**
+```
+Spotify: "Bad Habits - Ed Sheeran"
+Bot: {PREFIX}play bad habits ed sheeran
+```
+
+**Untuk Playlist:**
+1. Buat playlist di YouTube Music
+2. Copy playlist URL ke bot
+3. `{PREFIX}play https://music.youtube.com/playlist?list=...`
         """,
         inline=False
     )
