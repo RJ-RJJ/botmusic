@@ -868,6 +868,13 @@ class Music(commands.Cog):
         items_per_page = 10
         pages = math.ceil(len(ctx.voice_state.songs) / items_per_page)
 
+        # Validate page number
+        if page < 1:
+            page = 1
+        elif page > pages:
+            return await ctx.send(f'📋 **Page {page} not found!**\n'
+                                f'Queue only has **{pages} page(s)**. Use `?queue {pages}` for the last page.')
+
         start = (page - 1) * items_per_page
         end = start + items_per_page
 
@@ -886,11 +893,25 @@ class Music(commands.Cog):
             if remaining_songs > 0:
                 playlist_info = f'\n📀 **Playlist**: {playlist_title}\n🔄 {remaining_songs} more songs will auto-load'
 
+        # Create more informative description
+        total_songs = len(ctx.voice_state.songs)
+        
+        if pages == 1:
+            # Single page - no need for pagination info
+            description = f'**{total_songs} tracks in queue:**\n\n{queue}{playlist_info}'
+            footer_text = f'{total_songs} songs total'
+        else:
+            # Multiple pages - show pagination info
+            showing_start = start + 1
+            showing_end = min(end, total_songs)
+            description = f'**{total_songs} tracks in queue** (showing {showing_start}-{showing_end}):\n\n{queue}{playlist_info}'
+            footer_text = 'Page {}/{} • Use ?queue <page> to navigate'.format(page, pages)
+        
         embed = (discord.Embed(
             title="📋 Music Queue", 
-            description='**{} tracks in queue:**\n\n{}{}'.format(len(ctx.voice_state.songs), queue, playlist_info),
+            description=description,
             color=discord.Color.blue()
-        ).set_footer(text='Viewing page {}/{}'.format(page, pages)))
+        ).set_footer(text=footer_text))
         
         await ctx.send(embed=embed)
 
@@ -1299,18 +1320,18 @@ async def help_command(ctx):
     embed.add_field(
         name="🎵 **Music Commands**",
         value=f"""
-        `{PREFIX}play <song/url/playlist>` - Play music or playlist (⚡ Fast concurrent loading)
-        `{PREFIX}pause` - Pause current song
-        `{PREFIX}resume` - Resume paused song
-        `{PREFIX}skip` - Skip current song
-        `{PREFIX}stop` - Stop music and clear queue
-        `{PREFIX}queue` - Show music queue
-        `{PREFIX}now` - Show currently playing song
-        `{PREFIX}volume [1-100]` - Set/check volume
-        `{PREFIX}loop` - Toggle loop mode
-        `{PREFIX}shuffle` - Shuffle queue
-        `{PREFIX}remove <number>` - Remove song from queue
-        `{PREFIX}playlist` - Show playlist status
+`{PREFIX}play <song/url/playlist>` - Play music or playlist (⚡ Fast concurrent loading)
+`{PREFIX}pause` - Pause current song
+`{PREFIX}resume` - Resume paused song
+`{PREFIX}skip` - Skip current song
+`{PREFIX}stop` - Stop music and clear queue
+`{PREFIX}queue` - Show music queue
+`{PREFIX}now` - Show currently playing song
+`{PREFIX}volume [1-100]` - Set/check volume
+`{PREFIX}loop` - Toggle loop mode
+`{PREFIX}shuffle` - Shuffle queue
+`{PREFIX}remove <number>` - Remove song from queue
+`{PREFIX}playlist` - Show playlist status
         """,
         inline=False
     )
@@ -1318,9 +1339,9 @@ async def help_command(ctx):
     embed.add_field(
         name="🔧 **Voice Commands**",
         value=f"""
-        `{PREFIX}join` - Join your voice channel
-        `{PREFIX}leave` - Leave voice channel
-        `{PREFIX}summon <channel>` - Join specific channel
+`{PREFIX}join` - Join your voice channel
+`{PREFIX}leave` - Leave voice channel
+`{PREFIX}summon <channel>` - Join specific channel
         """,
         inline=False
     )
@@ -1328,8 +1349,8 @@ async def help_command(ctx):
     embed.add_field(
         name="🔧 **Troubleshooting**",
         value=f"""
-        `{PREFIX}debug` - Show bot status and diagnostics
-        `{PREFIX}fix` - Restart audio player if stuck
+`{PREFIX}debug` - Show bot status and diagnostics
+`{PREFIX}fix` - Restart audio player if stuck
         """,
         inline=False
     )
@@ -1337,12 +1358,12 @@ async def help_command(ctx):
     embed.add_field(
         name="📝 **Examples**",
         value=f"""
-        `{PREFIX}play never gonna give you up`
-        `{PREFIX}play https://www.youtube.com/watch?v=...`
-        `{PREFIX}play https://www.youtube.com/playlist?list=...` *(⚡ fast-loads)*
-        `{PREFIX}play https://music.youtube.com/playlist?list=...` *(⚡ YouTube Music)*
-        `{PREFIX}queue 2` *(page 2)* • `{PREFIX}playlist` *(status)*
-        `{PREFIX}volume 50` • `{PREFIX}volume` *(check)* • `{PREFIX}skip`
+`{PREFIX}play never gonna give you up`
+`{PREFIX}play https://www.youtube.com/watch?v=...`
+`{PREFIX}play https://www.youtube.com/playlist?list=...` *(⚡ fast-loads)*
+`{PREFIX}play https://music.youtube.com/playlist?list=...` *(⚡ YouTube Music)*
+`{PREFIX}queue 2` *(page 2)* • `{PREFIX}playlist` *(status)*
+`{PREFIX}volume 50` • `{PREFIX}volume` *(check)* • `{PREFIX}skip`
         """,
         inline=False
     )
