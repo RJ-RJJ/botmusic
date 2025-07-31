@@ -410,6 +410,9 @@ class VoiceState:
                 print(f"▶️ Starting playback: {self.current.source.title}")
                 self.voice.play(self.current.source, after=self.play_next_song)
                 
+                # Brief delay to allow audio to start properly
+                await asyncio.sleep(0.1)
+                
                 # Send enhanced "Now Playing" message
                 embed = self.current.create_embed()
                 
@@ -450,23 +453,28 @@ class VoiceState:
                 continue
 
     def play_next_song(self, error=None):
+        current_song = getattr(self.current, 'source', {})
+        song_title = getattr(current_song, 'title', 'Unknown Song')
+        
         if error:
             # Handle common FFmpeg errors more gracefully
             error_str = str(error)
             if "'_MissingSentinel' object has no attribute 'read'" in error_str:
-                print("🔧 FFmpeg audio source error - likely due to stream expiration during loop")
+                print(f"🔧 FFmpeg audio source error for '{song_title}' - likely due to stream expiration during loop")
                 # Don't raise the error, just continue to next song
                 self.loop = False  # Disable loop to prevent repeated errors
             elif any(keyword in error_str.lower() for keyword in ['ffmpeg', 'audio', 'network', 'connection', 'timeout', 'http']):
-                print(f"🌐 Network/Audio playback error (recovered): {error_str}")
+                print(f"🌐 Network/Audio playback error for '{song_title}' (recovered): {error_str}")
                 # Don't crash the bot for network issues, just continue
             elif "keepalive request failed" in error_str or "Cannot reuse HTTP connection" in error_str:
-                print(f"🔄 YouTube CDN switching error (normal for hosting): {error_str}")
+                print(f"🔄 YouTube CDN switching error for '{song_title}' (normal for hosting): {error_str}")
                 # These are expected on hosting platforms, don't crash
             else:
                 # For other unexpected errors, still log them but don't crash
-                print(f"⚠️ Unexpected playback error (continuing): {error_str}")
+                print(f"⚠️ Unexpected playback error for '{song_title}' (continuing): {error_str}")
                 # Changed from raising error to logging - better for stability
+        else:
+            print(f"✅ Song '{song_title}' finished normally, moving to next")
 
         self.next.set()
 
@@ -1226,8 +1234,7 @@ class Music(commands.Cog):
                 await ctx.voice_state.songs.put(song)
                 await ctx.send('🎵 Enqueued {}'.format(str(source)))
                 
-                # Ensure audio player is running for single songs too
-                await self._ensure_audio_player_running(ctx)
+                # Note: Audio player task is already running and will start playback automatically
     
     async def _handle_playlist(self, ctx: commands.Context, playlist_data):
         """Handle playlist loading with smart concurrent batching"""
@@ -1263,10 +1270,9 @@ class Music(commands.Cog):
                 
         await loading_msg.edit(content=final_msg)
         
-        # Ensure audio player is running after playlist loading
-        # This fixes the issue where playlists don't auto-start playback
-        if loaded_count > 0:
-            await self._ensure_audio_player_running(ctx)
+        # Note: Audio player task is already created in VoiceState.__init__()
+        # and should automatically start playing when songs are added to the queue.
+        # No need to restart it here - that was causing double playback issues.
     
     async def _ensure_audio_player_running(self, ctx: commands.Context):
         """Ensure the audio player task is running and restart if necessary"""
@@ -1275,15 +1281,22 @@ class Music(commands.Cog):
         # Check if audio player task exists and is healthy
         if hasattr(voice_state, 'audio_player') and voice_state.audio_player:
             if not voice_state.audio_player.done() and not voice_state.audio_player.cancelled():
-                # Audio player is running fine
+                # Audio player is running fine, no need to restart
+                print("🎵 Audio player already running - no restart needed")
                 return
+        
+        # Only restart if there are songs in queue AND no healthy audio player
+        if len(voice_state.songs) == 0:
+            print("🎵 No songs in queue - audio player will start when songs are added")
+            return
         
         # Audio player is not running or has crashed, restart it
         print("🔧 Auto-starting audio player for playlist playback")
         
-        # Cancel old task if it exists
+        # Cancel old task if it exists and wait briefly
         if hasattr(voice_state, 'audio_player') and voice_state.audio_player:
             voice_state.audio_player.cancel()
+            await asyncio.sleep(0.1)  # Brief delay to ensure cancellation
         
         # Create new audio player task
         voice_state.audio_player = ctx.bot.loop.create_task(voice_state.audio_player_task())
