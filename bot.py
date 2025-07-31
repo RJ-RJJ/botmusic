@@ -83,7 +83,13 @@ class YTDLSource(discord.PCMVolumeTransformer):
     YTDL = yt_dlp.YoutubeDL(YDL_OPTIONS)
 
     def __init__(self, ctx: commands.Context, source: discord.FFmpegPCMAudio, *, data: dict, volume: float = 0.5):
-        super().__init__(source, volume)
+        # Handle lazy-loaded sources where source might be None initially
+        if source is not None:
+            super().__init__(source, volume)
+        else:
+            # For lazy-loaded sources, we'll set the source later
+            self.source = None
+            self.volume = volume
 
         self.requester = ctx.author
         self.channel = ctx.channel
@@ -103,6 +109,10 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.likes = data.get('like_count')
         self.dislikes = data.get('dislike_count')
         self.stream_url = data.get('url')
+        
+        # Store webpage URL for potential stream refresh
+        self.webpage_url = data.get('webpage_url')
+        self._ctx = ctx
 
     def __str__(self):
         return '**{0.title}** by **{0.uploader}**'.format(self)
@@ -157,6 +167,90 @@ class YTDLSource(discord.PCMVolumeTransformer):
                     raise YTDLError('Couldn\'t retrieve any matches for `{}`'.format(webpage_url))
 
         return cls(ctx, discord.FFmpegPCMAudio(info['url'], **FFMPEG_OPTIONS, executable=FFMPEG_EXECUTABLE), data=info)
+        
+    @classmethod
+    async def create_source_lazy(cls, ctx: commands.Context, search: str, *, loop: asyncio.BaseEventLoop = None):
+        """Create source with metadata only, without extracting stream URL (for playlist loading)"""
+        loop = loop or asyncio.get_event_loop()
+
+        # Extract metadata only (no stream URL processing)
+        partial = functools.partial(cls.YTDL.extract_info, search, download=False, process=False)
+        data = await loop.run_in_executor(None, partial)
+
+        if data is None:
+            raise YTDLError('Couldn\'t find anything that matches `{}`'.format(search))
+
+        if 'entries' not in data:
+            info = data
+        else:
+            info = None
+            for entry in data['entries']:
+                if entry:
+                    info = entry
+                    break
+
+            if info is None:
+                raise YTDLError('Couldn\'t find anything that matches `{}`'.format(search))
+
+        # Store the webpage URL for later stream extraction
+        webpage_url = info.get('webpage_url', search)
+        
+        # Create a placeholder audio source (will be replaced when actually played)
+        # Use a minimal dummy source that won't actually play
+        placeholder_source = None
+        
+        # Store the URL for later stream extraction
+        info['webpage_url'] = webpage_url
+        info['_lazy_loaded'] = True
+        
+        return cls(ctx, placeholder_source, data=info)
+        
+    async def refresh_stream_url(self):
+        """Refresh the stream URL if it has expired, or create it for lazy-loaded sources"""
+        webpage_url = self.webpage_url or self.url
+        if not webpage_url:
+            raise YTDLError("No webpage URL available for stream refresh")
+            
+        try:
+            is_lazy = self.data.get('_lazy_loaded', False)
+            action = "Creating" if is_lazy else "Refreshing"
+            print(f"🔄 {action} stream URL for: {self.title}")
+            
+            loop = self._ctx.bot.loop
+            partial = functools.partial(self.YTDL.extract_info, webpage_url, download=False)
+            info = await loop.run_in_executor(None, partial)
+            
+            if 'entries' not in info:
+                new_stream_url = info['url']
+            else:
+                if info['entries'] and info['entries'][0]:
+                    new_stream_url = info['entries'][0]['url']
+                else:
+                    raise YTDLError("No valid entries found")
+            
+            # Create new audio source with fresh URL
+            new_source = discord.FFmpegPCMAudio(new_stream_url, **FFMPEG_OPTIONS, executable=FFMPEG_EXECUTABLE)
+            
+            # Update this instance
+            if is_lazy and self.source is None:
+                # Initialize the parent class for the first time
+                super(YTDLSource, self).__init__(new_source, self.volume)
+            else:
+                # Update existing source
+                self.source = new_source
+            
+            self.stream_url = new_stream_url
+            
+            # Mark as no longer lazy-loaded
+            if is_lazy:
+                self.data['_lazy_loaded'] = False
+            
+            print(f"✅ Stream URL {action.lower()} successful for: {self.title}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Failed to {action.lower()} stream URL for {self.title}: {e}")
+            return False
     
     @classmethod
     async def extract_playlist_info(cls, url: str, *, loop: asyncio.BaseEventLoop = None):
@@ -408,7 +502,41 @@ class VoiceState:
                     return
                 
                 print(f"▶️ Starting playback: {self.current.source.title}")
-                self.voice.play(self.current.source, after=self.play_next_song)
+                
+                # Check if this is a lazy-loaded source that needs stream URL extraction
+                if hasattr(self.current.source, 'data') and self.current.source.data.get('_lazy_loaded'):
+                    print(f"🔄 Lazy-loaded source detected, extracting fresh stream URL for: {self.current.source.title}")
+                    if not await self.current.source.refresh_stream_url():
+                        print(f"❌ Failed to extract stream URL for lazy-loaded source: {self.current.source.title}")
+                        # Skip to next song
+                        self.next.set()
+                        continue
+                
+                # Try to play, with stream refresh retry if it fails
+                play_success = False
+                for attempt in range(2):  # Try original, then retry with refresh
+                    try:
+                        self.voice.play(self.current.source, after=self.play_next_song)
+                        play_success = True
+                        break
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        if attempt == 0 and any(keyword in error_str for keyword in ['403', 'forbidden', 'expired', 'unavailable']):
+                            print(f"⚠️ Stream error on attempt {attempt + 1}, trying to refresh URL: {e}")
+                            # Try to refresh the stream URL
+                            if await self.current.source.refresh_stream_url():
+                                continue  # Retry with refreshed URL
+                        
+                        # If we get here, either it's not a stream error or refresh failed
+                        print(f"❌ Playback failed after {attempt + 1} attempts: {e}")
+                        if attempt == 1:  # Last attempt failed
+                            raise e
+                
+                if not play_success:
+                    print(f"❌ Failed to start playback for: {self.current.source.title}")
+                    # Skip to next song
+                    self.next.set()
+                    continue
                 
                 # Brief delay to allow audio to start properly
                 await asyncio.sleep(0.1)
@@ -463,6 +591,9 @@ class VoiceState:
                 print(f"🔧 FFmpeg audio source error for '{song_title}' - likely due to stream expiration during loop")
                 # Don't raise the error, just continue to next song
                 self.loop = False  # Disable loop to prevent repeated errors
+            elif any(keyword in error_str.lower() for keyword in ['403', 'forbidden', 'expired', 'unavailable']):
+                print(f"🔄 Stream URL expired during playback for '{song_title}': {error_str}")
+                # These indicate stream URL expiration - future songs should refresh their URLs
             elif any(keyword in error_str.lower() for keyword in ['ffmpeg', 'audio', 'network', 'connection', 'timeout', 'http']):
                 print(f"🌐 Network/Audio playback error for '{song_title}' (recovered): {error_str}")
                 # Don't crash the bot for network issues, just continue
@@ -584,11 +715,32 @@ class VoiceState:
     async def _load_single_song_safe(self, url):
         """Safely load a single song with error handling"""
         try:
-            source = await YTDLSource.create_source(self._ctx, url, loop=self.bot.loop)
+            # For playlist songs, use lightweight loading (metadata only)
+            source = await YTDLSource.create_source_lazy(self._ctx, url, loop=self.bot.loop)
             return Song(source)
         except Exception as e:
             # Re-raise the exception to be handled by the caller
             raise e
+    
+    async def _restart_audio_player_if_needed(self):
+        """Restart audio player task if it's not running (called after voice connection established)"""
+        # Check if audio player task exists and is healthy
+        if hasattr(self, 'audio_player') and self.audio_player:
+            if not self.audio_player.done() and not self.audio_player.cancelled():
+                # Audio player is running fine
+                print("🎵 Audio player already running - no restart needed")
+                return
+        
+        # Audio player is not running or has crashed, restart it
+        print("🔧 Restarting audio player after voice connection established")
+        
+        # Cancel old task if it exists
+        if hasattr(self, 'audio_player') and self.audio_player:
+            self.audio_player.cancel()
+            await asyncio.sleep(0.1)  # Brief delay to ensure cancellation
+        
+        # Create new audio player task
+        self.audio_player = self.bot.loop.create_task(self.audio_player_task())
     
     async def check_playlist_auto_load(self):
         """Check if we need to auto-load more songs from current playlist"""
@@ -744,6 +896,9 @@ class Music(commands.Cog):
             return
 
         ctx.voice_state.voice = await destination.connect()
+        
+        # Restart audio player task now that we have a voice connection
+        await ctx.voice_state._restart_audio_player_if_needed()
 
     @commands.command(name='summon')
     @commands.has_permissions(manage_guild=True)
@@ -761,6 +916,9 @@ class Music(commands.Cog):
             return
 
         ctx.voice_state.voice = await destination.connect()
+        
+        # Restart audio player task now that we have a voice connection
+        await ctx.voice_state._restart_audio_player_if_needed()
 
     @commands.command(name='leave', aliases=['disconnect'])
     @commands.has_permissions(manage_guild=True)
