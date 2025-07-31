@@ -1,0 +1,32 @@
+# Ignore local FFmpeg (we'll use system FFmpeg in container)
+ffmpeg/
+*.exe
+
+# Ignore virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore development files
+.git/
+.gitignore
+README.md
+.vscode/
+*.md
+
+# Ignore local environment files
+.env
+token.env
+
+# Ignore node_modules (if any)
+node_modules/
+
+# Ignore commands and events directories if they're not used
+commands/
+events/
+
+# Ignore logs
+*.log
+logs/
