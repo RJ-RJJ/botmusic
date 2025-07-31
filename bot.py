@@ -312,86 +312,127 @@ class VoiceState:
         return self.voice and self.current
 
     async def audio_player_task(self):
+        """Main audio player loop with enhanced error handling and recovery"""
+        print(f"🎵 Audio player task started for guild {self._ctx.guild.id}")
+        
         while True:
-            self.next.clear()
+            try:
+                self.next.clear()
 
-            if not self.loop:
-                # Try to get the next song within 3 minutes.
-                # If no song will be added to the queue in time,
-                # the player will disconnect due to performance
-                # reasons.
-                try:
-                    async with asyncio.timeout(180):  # 3 minutes
-                        self.current = await self.songs.get()
-                except asyncio.TimeoutError:
-                    # Before giving up, check if we can auto-load from playlist
-                    if self.current_playlist and len(self.songs) == 0:
-                        await self.check_playlist_auto_load()
-                        # Try one more time to get a song
-                        try:
-                            async with asyncio.timeout(30):  # Short timeout
-                                self.current = await self.songs.get()
-                        except asyncio.TimeoutError:
+                # Check voice connection before proceeding
+                if not self.voice or not self.voice.is_connected():
+                    print("⚠️ Voice connection lost, stopping audio player")
+                    self.bot.loop.create_task(self.stop())
+                    return
+
+                if not self.loop:
+                    # Try to get the next song within 3 minutes.
+                    # If no song will be added to the queue in time,
+                    # the player will disconnect due to performance
+                    # reasons.
+                    try:
+                        async with asyncio.timeout(180):  # 3 minutes
+                            self.current = await self.songs.get()
+                            print(f"🎵 Got next song: {self.current.source.title}")
+                    except asyncio.TimeoutError:
+                        print("⏰ Timeout waiting for next song")
+                        # Before giving up, check if we can auto-load from playlist
+                        if self.current_playlist and len(self.songs) == 0:
+                            await self.check_playlist_auto_load()
+                            # Try one more time to get a song
+                            try:
+                                async with asyncio.timeout(30):  # Short timeout
+                                    self.current = await self.songs.get()
+                                    print(f"🎵 Got song after auto-load: {self.current.source.title}")
+                            except asyncio.TimeoutError:
+                                print("⏰ Final timeout, stopping player")
+                                self.bot.loop.create_task(self.stop())
+                                return
+                        else:
+                            print("⏰ No playlist auto-load available, stopping player")
                             self.bot.loop.create_task(self.stop())
                             return
-                    else:
-                        self.bot.loop.create_task(self.stop())
-                        return
-                
-                # After getting a song, check if we need to auto-load more (for future)
-                await self.check_playlist_auto_load()
-            else:
-                # When looping, we need to recreate the audio source
-                # because FFmpeg sources can't be reused
-                if self.current and hasattr(self.current.source, 'data'):
-                    try:
-                        # Get the stream URL from the song data
-                        audio_url = self.current.source.data.get('url')
-                        if audio_url:
-                            # Create a new FFmpeg audio source
-                            new_audio_source = discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS, executable=FFMPEG_EXECUTABLE)
-                            
-                            # Replace the old audio source in the YTDLSource
-                            old_volume = self.current.source.volume
-                            self.current.source.original = new_audio_source
-                            self.current.source.volume = old_volume  # Preserve volume
-                        else:
-                            # If we can't get the URL, disable loop and continue
+                    
+                    # After getting a song, check if we need to auto-load more (for future)
+                    await self.check_playlist_auto_load()
+                else:
+                    # When looping, we need to recreate the audio source
+                    # because FFmpeg sources can't be reused
+                    print(f"🔄 Looping song: {self.current.source.title}")
+                    if self.current and hasattr(self.current.source, 'data'):
+                        try:
+                            # Get the stream URL from the song data
+                            audio_url = self.current.source.data.get('url')
+                            if audio_url:
+                                # Create a new FFmpeg audio source
+                                new_audio_source = discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS, executable=FFMPEG_EXECUTABLE)
+                                
+                                # Replace the old audio source in the YTDLSource
+                                old_volume = self.current.source.volume
+                                self.current.source.original = new_audio_source
+                                self.current.source.volume = old_volume  # Preserve volume
+                                print("✅ Successfully recreated audio source for loop")
+                            else:
+                                # If we can't get the URL, disable loop and continue
+                                self.loop = False
+                                await self.current.source.channel.send("⚠️ Cannot loop this song - no stream URL available")
+                                print("❌ No audio URL for looping")
+                        except Exception as e:
+                            # If recreation fails, disable loop and continue
                             self.loop = False
-                            await self.current.source.channel.send("⚠️ Cannot loop this song - no stream URL available")
-                    except Exception as e:
-                        # If recreation fails, disable loop and continue
-                        self.loop = False
-                        await self.current.source.channel.send("⚠️ Loop failed - continuing to next song")
-                        print(f"Loop recreation failed: {e}")
+                            await self.current.source.channel.send("⚠️ Loop failed - continuing to next song")
+                            print(f"❌ Loop recreation failed: {e}")
 
-            self.current.source.volume = self._volume
-            self.voice.play(self.current.source, after=self.play_next_song)
-            
-            # Send enhanced "Now Playing" message
-            embed = self.current.create_embed()
-            
-            # Add playlist info if active
-            if self.current_playlist:
-                total_songs = len(self.current_playlist['entries'])
-                playlist_title = self.current_playlist.get('title', 'Unknown Playlist')
-                queue_count = len(self.songs)
+                # Set volume and start playing
+                self.current.source.volume = self._volume
                 
-                # Calculate remaining: total songs - currently playing - in queue
-                processed_songs = self.playlist_position  # Songs we've attempted to load
-                remaining = total_songs - processed_songs
+                # Double-check voice connection before playing
+                if not self.voice or not self.voice.is_connected():
+                    print("⚠️ Voice connection lost before playing, stopping")
+                    self.bot.loop.create_task(self.stop())
+                    return
                 
-                # If we have songs in queue, show that info
-                if queue_count > 0 or remaining > 0:
-                    embed.add_field(
-                        name="📀 From Playlist",
-                        value=f"**{playlist_title}**\n{queue_count} in queue • {remaining} remaining",
-                        inline=False
-                    )
-            
-            await self.current.source.channel.send("🎵 **Now Playing:**", embed=embed)
+                print(f"▶️ Starting playback: {self.current.source.title}")
+                self.voice.play(self.current.source, after=self.play_next_song)
+                
+                # Send enhanced "Now Playing" message
+                embed = self.current.create_embed()
+                
+                # Add playlist info if active
+                if self.current_playlist:
+                    total_songs = len(self.current_playlist['entries'])
+                    playlist_title = self.current_playlist.get('title', 'Unknown Playlist')
+                    queue_count = len(self.songs)
+                    
+                    # Calculate remaining: total songs - currently playing - in queue
+                    processed_songs = self.playlist_position  # Songs we've attempted to load
+                    remaining = total_songs - processed_songs
+                    
+                    # If we have songs in queue, show that info
+                    if queue_count > 0 or remaining > 0:
+                        embed.add_field(
+                            name="📀 From Playlist",
+                            value=f"**{playlist_title}**\n{queue_count} in queue • {remaining} remaining",
+                            inline=False
+                        )
+                
+                await self.current.source.channel.send("🎵 **Now Playing:**", embed=embed)
 
-            await self.next.wait()
+                await self.next.wait()
+                
+            except Exception as e:
+                print(f"❌ Critical error in audio_player_task: {e}")
+                # Try to send error message to channel
+                try:
+                    if hasattr(self, '_ctx') and self._ctx:
+                        await self._ctx.send(f"⚠️ Audio player error: {str(e)}\nRestarting player...")
+                except:
+                    pass
+                
+                # Clear current song and continue
+                self.current = None
+                await asyncio.sleep(2)  # Brief pause before continuing
+                continue
 
     def play_next_song(self, error=None):
         if error:
@@ -932,6 +973,143 @@ class Music(commands.Cog):
         
         await ctx.send(embed=embed)
 
+    @commands.command(name='debug', aliases=['status'])
+    async def _debug(self, ctx: commands.Context):
+        """Shows bot status and debug information."""
+        
+        voice_state = ctx.voice_state
+        
+        embed = discord.Embed(
+            title="🔧 Bot Debug Status",
+            color=discord.Color.blue()
+        )
+        
+        # Voice Connection Status
+        voice_status = "❌ Not Connected"
+        if voice_state.voice:
+            if voice_state.voice.is_connected():
+                voice_status = f"✅ Connected to {voice_state.voice.channel.name}"
+            else:
+                voice_status = "⚠️ Disconnected"
+        
+        embed.add_field(
+            name="🔊 Voice Connection",
+            value=voice_status,
+            inline=False
+        )
+        
+        # Audio Player Status
+        player_status = "❌ Not Running"
+        if hasattr(voice_state, 'audio_player') and voice_state.audio_player:
+            if voice_state.audio_player.done():
+                player_status = "💀 Crashed/Stopped"
+            elif voice_state.audio_player.cancelled():
+                player_status = "⏹️ Cancelled"
+            else:
+                player_status = "✅ Running"
+        
+        embed.add_field(
+            name="🎵 Audio Player Task",
+            value=player_status,
+            inline=True
+        )
+        
+        # Current Song Status
+        current_status = "❌ None"
+        if voice_state.current:
+            current_status = f"🎵 {voice_state.current.source.title[:30]}..."
+        
+        embed.add_field(
+            name="▶️ Current Song",
+            value=current_status,
+            inline=True
+        )
+        
+        # Queue Status
+        queue_count = len(voice_state.songs)
+        queue_status = f"📝 {queue_count} songs"
+        if queue_count == 0:
+            queue_status = "📝 Empty"
+        
+        embed.add_field(
+            name="📋 Queue",
+            value=queue_status,
+            inline=True
+        )
+        
+        # Playing Status
+        is_playing = "❌ No"
+        if voice_state.voice and voice_state.voice.is_playing():
+            is_playing = "✅ Yes"
+        elif voice_state.voice and voice_state.voice.is_paused():
+            is_playing = "⏸️ Paused"
+        
+        embed.add_field(
+            name="🎶 Is Playing",
+            value=is_playing,
+            inline=True
+        )
+        
+        # Loop Status
+        loop_status = "🔁 On" if voice_state.loop else "➡️ Off"
+        embed.add_field(
+            name="🔄 Loop",
+            value=loop_status,
+            inline=True
+        )
+        
+        # Volume
+        volume_status = f"🔊 {int(voice_state.volume * 100)}%"
+        embed.add_field(
+            name="📢 Volume",
+            value=volume_status,
+            inline=True
+        )
+        
+        embed.set_footer(text="Use ?fix if audio player is stuck")
+        
+        await ctx.send(embed=embed)
+
+    @commands.command(name='fix', aliases=['restart'])
+    async def _fix(self, ctx: commands.Context):
+        """Restart the audio player if it gets stuck."""
+        
+        voice_state = ctx.voice_state
+        
+        # Check if there are songs in queue but nothing playing
+        queue_count = len(voice_state.songs)
+        is_playing = voice_state.voice and voice_state.voice.is_playing()
+        
+        embed = discord.Embed(title="🔧 Audio Player Fix", color=discord.Color.orange())
+        
+        if not voice_state.voice or not voice_state.voice.is_connected():
+            embed.description = "❌ Not connected to voice channel. Use `?join` first."
+            embed.color = discord.Color.red()
+            return await ctx.send(embed=embed)
+        
+        # Stop current playback if any
+        if voice_state.voice.is_playing():
+            voice_state.voice.stop()
+            embed.add_field(name="⏹️ Step 1", value="Stopped current playback", inline=False)
+        
+        # Cancel and restart audio player task
+        if hasattr(voice_state, 'audio_player') and voice_state.audio_player:
+            voice_state.audio_player.cancel()
+            embed.add_field(name="🔄 Step 2", value="Cancelled old audio player task", inline=False)
+        
+        # Create new audio player task
+        voice_state.audio_player = ctx.bot.loop.create_task(voice_state.audio_player_task())
+        embed.add_field(name="✅ Step 3", value="Started new audio player task", inline=False)
+        
+        # Check if there are songs to play
+        if queue_count > 0:
+            embed.add_field(name="🎵 Result", value=f"Audio player restarted! {queue_count} songs in queue should start playing.", inline=False)
+            embed.color = discord.Color.green()
+        else:
+            embed.add_field(name="📝 Result", value="Audio player restarted, but queue is empty. Add songs with `?play`", inline=False)
+        
+        await ctx.send(embed=embed)
+
     @commands.command(name='play', aliases=['p'])
     async def _play(self, ctx: commands.Context, *, search: str):
         """Plays a song or playlist.
@@ -1130,6 +1308,15 @@ async def help_command(ctx):
         `{PREFIX}join` - Join your voice channel
         `{PREFIX}leave` - Leave voice channel
         `{PREFIX}summon <channel>` - Join specific channel
+        """,
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🔧 **Troubleshooting**",
+        value=f"""
+        `{PREFIX}debug` - Show bot status and diagnostics
+        `{PREFIX}fix` - Restart audio player if stuck
         """,
         inline=False
     )
