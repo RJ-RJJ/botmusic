@@ -31,9 +31,21 @@ FFMPEG_OPTIONS = {
     'options': '-vn'
 }
 
-# FFmpeg executable path (auto-detect for hosting platforms)
+# FFmpeg executable path (local first, then system for hosting platforms)
 import shutil
-FFMPEG_EXECUTABLE = shutil.which('ffmpeg') or 'ffmpeg'  # Use system FFmpeg
+import os
+
+# Try to use local FFmpeg first, then system FFmpeg
+def get_ffmpeg_executable():
+    # Check local ffmpeg folder first
+    local_ffmpeg = os.path.join(os.path.dirname(__file__), 'ffmpeg', 'ffmpeg.exe')
+    if os.path.exists(local_ffmpeg):
+        return local_ffmpeg
+    
+    # Fall back to system FFmpeg (for hosting platforms)
+    return shutil.which('ffmpeg') or 'ffmpeg'
+
+FFMPEG_EXECUTABLE = get_ffmpeg_executable()
 
 # yt-dlp options (Optimized for speed)
 YDL_OPTIONS = {
@@ -1233,7 +1245,8 @@ async def on_ready():
     
     print(f'✅ Bot ready! Logged in as {bot.user}')
     print(f'🎵 Using Python with yt-dlp')
-    print(f'🎵 FFmpeg: {"System FFmpeg" if FFMPEG_EXECUTABLE == "ffmpeg" else FFMPEG_EXECUTABLE}')
+    ffmpeg_type = "Local FFmpeg" if "ffmpeg.exe" in FFMPEG_EXECUTABLE else "System FFmpeg"
+    print(f'🎵 FFmpeg: {ffmpeg_type} ({FFMPEG_EXECUTABLE})')
     print(f'🎧 Status: Listening to ?help')
 
 @bot.event
