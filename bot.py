@@ -25,10 +25,10 @@ if not TOKEN:
     print("🔗 Get your token from: https://discord.com/developers/applications")
     exit(1)
 
-# FFmpeg options
+# FFmpeg options (Enhanced for hosting stability)
 FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_at_eof 1 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx',
+    'options': '-vn -bufsize 512k -maxrate 128k'
 }
 
 # FFmpeg executable path (local first, then system for hosting platforms)
@@ -47,7 +47,7 @@ def get_ffmpeg_executable():
 
 FFMPEG_EXECUTABLE = get_ffmpeg_executable()
 
-# yt-dlp options (Optimized for speed)
+# yt-dlp options (Optimized for speed & hosting stability)
 YDL_OPTIONS = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -63,11 +63,14 @@ YDL_OPTIONS = {
     'extractaudio': True,
     'audioformat': 'mp3',
     'audioquality': '192K',
-    # Speed optimizations
-    'socket_timeout': 10,        # Faster timeout for slow sources
-    'retries': 2,               # Fewer retries for faster loading
-    'fragment_retries': 2,      # Fewer fragment retries
+    # Network & hosting optimizations
+    'socket_timeout': 15,        # Longer timeout for hosting
+    'retries': 3,               # More retries for network issues
+    'fragment_retries': 3,      # More fragment retries
     'skip_unavailable_fragments': True,  # Skip problematic fragments
+    'http_chunk_size': 10485760,  # 10MB chunks for better streaming
+    'keepalive': True,          # Keep connections alive
+    'prefer_free_formats': True, # Prefer formats that work better on hosting
 }
 
 class VoiceError(Exception):
@@ -451,15 +454,19 @@ class VoiceState:
             # Handle common FFmpeg errors more gracefully
             error_str = str(error)
             if "'_MissingSentinel' object has no attribute 'read'" in error_str:
-                print("FFmpeg audio source error - likely due to stream expiration during loop")
+                print("🔧 FFmpeg audio source error - likely due to stream expiration during loop")
                 # Don't raise the error, just continue to next song
                 self.loop = False  # Disable loop to prevent repeated errors
-            elif "ffmpeg" in error_str.lower() or "audio" in error_str.lower():
-                print(f"Audio playback error: {error_str}")
-                # Don't crash the bot, just continue
+            elif any(keyword in error_str.lower() for keyword in ['ffmpeg', 'audio', 'network', 'connection', 'timeout', 'http']):
+                print(f"🌐 Network/Audio playback error (recovered): {error_str}")
+                # Don't crash the bot for network issues, just continue
+            elif "keepalive request failed" in error_str or "Cannot reuse HTTP connection" in error_str:
+                print(f"🔄 YouTube CDN switching error (normal for hosting): {error_str}")
+                # These are expected on hosting platforms, don't crash
             else:
-                # For other unexpected errors, still raise them
-                raise VoiceError(str(error))
+                # For other unexpected errors, still log them but don't crash
+                print(f"⚠️ Unexpected playback error (continuing): {error_str}")
+                # Changed from raising error to logging - better for stability
 
         self.next.set()
 
@@ -1033,13 +1040,18 @@ class Music(commands.Cog):
         
         # Audio Player Status
         player_status = "❌ Not Running"
+        needs_restart = False
         if hasattr(voice_state, 'audio_player') and voice_state.audio_player:
             if voice_state.audio_player.done():
                 player_status = "💀 Crashed/Stopped"
+                needs_restart = True
             elif voice_state.audio_player.cancelled():
                 player_status = "⏹️ Cancelled"
+                needs_restart = True
             else:
                 player_status = "✅ Running"
+        else:
+            needs_restart = True
         
         embed.add_field(
             name="🎵 Audio Player Task",
@@ -1099,7 +1111,40 @@ class Music(commands.Cog):
             inline=True
         )
         
-        embed.set_footer(text="Use ?fix if audio player is stuck")
+        # Playlist Status (if active)
+        if voice_state.current_playlist:
+            playlist_title = voice_state.current_playlist.get('title', 'Unknown')[:30]
+            total_songs = len(voice_state.current_playlist['entries'])
+            remaining = total_songs - voice_state.playlist_position
+            embed.add_field(
+                name="📀 Active Playlist",
+                value=f"🎵 {playlist_title}...\n📊 {remaining}/{total_songs} remaining",
+                inline=False
+            )
+        
+        # Hosting Environment Info
+        import platform
+        hosting_info = f"🖥️ {platform.system()} {platform.release()}"
+        if FFMPEG_EXECUTABLE:
+            ffmpeg_type = "Local" if "ffmpeg.exe" in FFMPEG_EXECUTABLE else "System"
+            hosting_info += f"\n🎬 FFmpeg: {ffmpeg_type}"
+        
+        embed.add_field(
+            name="🌐 Environment",
+            value=hosting_info,
+            inline=True
+        )
+        
+        # Set footer with context-aware message
+        footer_text = "Enhanced for hosting stability"
+        if needs_restart and len(voice_state.songs) > 0:
+            footer_text = "⚠️ Audio player needs restart • Use ?fix • " + footer_text
+        elif not needs_restart:
+            footer_text = "✅ All systems running • " + footer_text
+        else:
+            footer_text = "Use ?fix if audio player is stuck • " + footer_text
+            
+        embed.set_footer(text=footer_text)
         
         await ctx.send(embed=embed)
 
@@ -1180,6 +1225,9 @@ class Music(commands.Cog):
                 song = Song(source)
                 await ctx.voice_state.songs.put(song)
                 await ctx.send('🎵 Enqueued {}'.format(str(source)))
+                
+                # Ensure audio player is running for single songs too
+                await self._ensure_audio_player_running(ctx)
     
     async def _handle_playlist(self, ctx: commands.Context, playlist_data):
         """Handle playlist loading with smart concurrent batching"""
@@ -1214,6 +1262,31 @@ class Music(commands.Cog):
                 final_msg += f'\n⚠️ Skipped {failed_count} unavailable songs'
                 
         await loading_msg.edit(content=final_msg)
+        
+        # Ensure audio player is running after playlist loading
+        # This fixes the issue where playlists don't auto-start playback
+        if loaded_count > 0:
+            await self._ensure_audio_player_running(ctx)
+    
+    async def _ensure_audio_player_running(self, ctx: commands.Context):
+        """Ensure the audio player task is running and restart if necessary"""
+        voice_state = ctx.voice_state
+        
+        # Check if audio player task exists and is healthy
+        if hasattr(voice_state, 'audio_player') and voice_state.audio_player:
+            if not voice_state.audio_player.done() and not voice_state.audio_player.cancelled():
+                # Audio player is running fine
+                return
+        
+        # Audio player is not running or has crashed, restart it
+        print("🔧 Auto-starting audio player for playlist playback")
+        
+        # Cancel old task if it exists
+        if hasattr(voice_state, 'audio_player') and voice_state.audio_player:
+            voice_state.audio_player.cancel()
+        
+        # Create new audio player task
+        voice_state.audio_player = ctx.bot.loop.create_task(voice_state.audio_player_task())
     
     def _is_playlist_url(self, url: str) -> bool:
         """Check if URL is a playlist from YouTube or YouTube Music"""
