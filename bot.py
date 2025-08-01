@@ -1569,26 +1569,11 @@ async def update_bot_status():
     
     while not bot.is_closed():
         try:
-            # Get current playing song from any active voice state
-            current_song = None
-            music_cog = bot.get_cog('Music')
-            if music_cog:
-                for voice_state in music_cog.voice_states.values():
-                    if voice_state.is_playing and voice_state.current:
-                        current_song = voice_state.current.source.title
-                        break
-            
-            # Choose status message
-            if current_song:
-                # If music is playing, show song name
-                status_text = f"🎵 {current_song[:45]}" + ("..." if len(current_song) > 45 else "")
-                activity_type = discord.ActivityType.listening
-            else:
-                # Rotate through simple status messages
-                status_messages = get_simple_status_messages()  # Refresh server count
-                status_text = status_messages[current_index % len(status_messages)]
-                activity_type = activity_types[current_index % len(activity_types)]
-                current_index += 1
+            # Always rotate through simple status messages (no song names)
+            status_messages = get_simple_status_messages()  # Refresh server count
+            status_text = status_messages[current_index % len(status_messages)]
+            activity_type = activity_types[current_index % len(activity_types)]
+            current_index += 1
             
             # Update bot presence
             activity = discord.Activity(type=activity_type, name=status_text)
