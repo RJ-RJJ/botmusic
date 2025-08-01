@@ -8,6 +8,8 @@ import functools
 import itertools
 import math
 import random
+import json
+import datetime
 
 
 # Load environment variables
@@ -24,6 +26,14 @@ if not TOKEN:
     print("☁️ For hosting: Set TOKEN environment variable in your hosting platform")
     print("🔗 Get your token from: https://discord.com/developers/applications")
     exit(1)
+
+# Railway Trial Configuration (Update these values)
+RAILWAY_CONFIG = {
+    'trial_start_date': '2025-01-31',   # YYYY-MM-DD - ubah ke tanggal mulai trial Railway
+    'initial_credit': 5.00,            # $5 initial credit
+    'trial_duration_days': 30,         # 30 hari trial
+    'estimated_monthly_cost': 3.00     # Estimasi biaya per bulan untuk bot ini
+}
 
 # FFmpeg options (Enhanced for hosting stability)
 FFMPEG_OPTIONS = {
@@ -852,6 +862,62 @@ class VoiceState:
         self.current_playlist = None
         self.playlist_position = 0
 
+# Railway Trial Status Functions
+def get_railway_trial_status():
+    """Calculate Railway trial days left and estimated credit remaining"""
+    try:
+        # Parse trial start date
+        start_date = datetime.datetime.strptime(RAILWAY_CONFIG['trial_start_date'], '%Y-%m-%d').date()
+        current_date = datetime.date.today()
+        
+        # Calculate days since trial started and days remaining
+        days_elapsed = (current_date - start_date).days
+        days_remaining = max(0, RAILWAY_CONFIG['trial_duration_days'] - days_elapsed)
+        
+        # Estimate credit usage (linear approximation)
+        daily_cost = RAILWAY_CONFIG['estimated_monthly_cost'] / 30
+        credit_used = days_elapsed * daily_cost
+        credit_remaining = max(0, RAILWAY_CONFIG['initial_credit'] - credit_used)
+        
+        return {
+            'days_remaining': days_remaining,
+            'credit_remaining': credit_remaining,
+            'is_trial_active': days_remaining > 0 and credit_remaining > 0
+        }
+    except Exception as e:
+        print(f"Error calculating Railway status: {e}")
+        return {
+            'days_remaining': 0,
+            'credit_remaining': 0.0,
+            'is_trial_active': False
+        }
+
+def format_railway_status():
+    """Format Railway trial status for bot status display"""
+    status = get_railway_trial_status()
+    
+    if not status['is_trial_active']:
+        return "Trial Expired - Need Upgrade"
+    
+    # Show days if more than 1 day left, otherwise show hours/urgent
+    if status['days_remaining'] > 1:
+        return f"Trial: {status['days_remaining']}d left"
+    elif status['days_remaining'] == 1:
+        return "Trial: Last Day!"
+    else:
+        return "Trial: Expired"
+
+def format_railway_credit():
+    """Format Railway credit status for bot status display"""
+    status = get_railway_trial_status()
+    
+    if status['credit_remaining'] <= 0:
+        return "Credit: $0.00 - Add funds!"
+    elif status['credit_remaining'] < 1.0:
+        return f"Credit: ${status['credit_remaining']:.2f} - Low!"
+    else:
+        return f"Credit: ${status['credit_remaining']:.2f}"
+
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
@@ -1472,19 +1538,19 @@ class Music(commands.Cog):
         
         # DRM-protected music services
         if 'open.spotify.com' in url_lower or 'spotify.com' in url_lower:
-            return True, "🚫 **Spotify tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`\n• Contoh: `?play bad habits ed sheeran`"
+            return True, "🚫 **Spotify tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`\n• Contoh: `?play bad habits ed sheeran`"
             
         elif 'music.apple.com' in url_lower or 'itunes.apple.com' in url_lower:
-            return True, "🚫 **Apple Music tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`"
+            return True, "🚫 **Apple Music tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`"
             
         elif 'tidal.com' in url_lower:
-            return True, "🚫 **Tidal tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`"
+            return True, "🚫 **Tidal tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`"
             
         elif 'deezer.com' in url_lower:
-            return True, "🚫 **Deezer tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`"
+            return True, "🚫 **Deezer tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`"
             
         elif 'music.amazon.com' in url_lower or 'amazon.com/music' in url_lower:
-            return True, "🚫 **Amazon Music tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu]`"
+            return True, "🚫 **Amazon Music tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`"
             
         # Other potentially problematic services
         elif 'netflix.com' in url_lower:
@@ -1534,21 +1600,76 @@ class Music(commands.Cog):
             if ctx.voice_client.channel != ctx.author.voice.channel:
                 raise commands.CommandError('Bot is already in a voice channel.')
 
+# Dynamic Status System
+async def update_bot_status():
+    """Continuously update bot status with rotating information"""
+    await bot.wait_until_ready()
+    
+    status_messages = [
+        "?help",
+        format_railway_status(),
+        format_railway_credit(),
+        "🎵 Music Bot Ready"
+    ]
+    
+    current_index = 0
+    
+    while not bot.is_closed():
+        try:
+            # Get current playing song from any active voice state
+            current_song = None
+            music_cog = bot.get_cog('Music')
+            if music_cog:
+                for voice_state in music_cog.voice_states.values():
+                    if voice_state.is_playing and voice_state.current:
+                        current_song = voice_state.current.source.title
+                        break
+            
+            # Choose status message
+            if current_song:
+                # If music is playing, show song name
+                status_text = f"🎵 {current_song[:50]}" + ("..." if len(current_song) > 50 else "")
+                activity_type = discord.ActivityType.listening
+            else:
+                # Rotate through status messages
+                status_text = status_messages[current_index % len(status_messages)]
+                current_index += 1
+                
+                # Choose activity type based on content
+                if "Trial" in status_text or "Credit" in status_text:
+                    activity_type = discord.ActivityType.watching
+                else:
+                    activity_type = discord.ActivityType.listening
+            
+            # Update bot presence
+            activity = discord.Activity(type=activity_type, name=status_text)
+            await bot.change_presence(activity=activity)
+            
+            # Wait 15 seconds before next update
+            await asyncio.sleep(15)
+            
+        except Exception as e:
+            print(f"Error updating bot status: {e}")
+            await asyncio.sleep(30)  # Wait longer on error
+
 # Events
 @bot.event
 async def on_ready():
     # Add the Music cog when bot is ready
     await bot.add_cog(Music(bot))
     
-    # Set bot status
-    activity = discord.Activity(type=discord.ActivityType.listening, name="?help")
-    await bot.change_presence(activity=activity)
+    # Start dynamic status updater
+    bot.loop.create_task(update_bot_status())
     
     print(f'✅ Bot ready! Logged in as {bot.user}')
     print(f'🎵 Using Python with yt-dlp')
     ffmpeg_type = "Local FFmpeg" if "ffmpeg.exe" in FFMPEG_EXECUTABLE else "System FFmpeg"
     print(f'🎵 FFmpeg: {ffmpeg_type} ({FFMPEG_EXECUTABLE})')
-    print(f'🎧 Status: Listening to ?help')
+    
+    # Show Railway trial info in logs
+    trial_status = get_railway_trial_status()
+    print(f'🚄 Railway Trial: {trial_status["days_remaining"]} days left, ${trial_status["credit_remaining"]:.2f} credit')
+    print(f'🎧 Status: Dynamic status system started')
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -1632,6 +1753,7 @@ async def help_command(ctx):
 `{PREFIX}debug` - Show bot status and diagnostics
 `{PREFIX}fix` - Restart audio player if stuck
 `{PREFIX}platforms` - Show supported platforms & alternatives
+`{PREFIX}railway` - Check hosting trial status & credits
         """,
         inline=False
     )
@@ -1661,6 +1783,171 @@ async def help_command(ctx):
     )
     
     await ctx.send(embed=embed)
+
+@bot.command(name='railway', aliases=['trial', 'status'])
+async def railway_status(ctx):
+    """Shows Railway trial status and credit information."""
+    trial_status = get_railway_trial_status()
+    
+    embed = discord.Embed(
+        title="🚄 Railway Hosting Status",
+        color=discord.Color.green() if trial_status['is_trial_active'] else discord.Color.red()
+    )
+    
+    # Trial days remaining
+    if trial_status['days_remaining'] > 7:
+        status_emoji = "✅"
+        status_color = "**Good**"
+    elif trial_status['days_remaining'] > 3:
+        status_emoji = "⚠️"
+        status_color = "**Warning**"
+    elif trial_status['days_remaining'] > 0:
+        status_emoji = "🔴"
+        status_color = "**Critical**"
+    else:
+        status_emoji = "❌"
+        status_color = "**Expired**"
+    
+    embed.add_field(
+        name=f"{status_emoji} Trial Status",
+        value=f"{status_color}\n{trial_status['days_remaining']} days remaining",
+        inline=True
+    )
+    
+    # Credit remaining
+    credit = trial_status['credit_remaining']
+    if credit > 3.0:
+        credit_emoji = "💰"
+        credit_status = "**Healthy**"
+    elif credit > 1.0:
+        credit_emoji = "⚠️"
+        credit_status = "**Low**"
+    elif credit > 0:
+        credit_emoji = "🔴"
+        credit_status = "**Critical**"
+    else:
+        credit_emoji = "❌"
+        credit_status = "**Depleted**"
+    
+    embed.add_field(
+        name=f"{credit_emoji} Credit Status",
+        value=f"{credit_status}\n${credit:.2f} remaining",
+        inline=True
+    )
+    
+    # Next steps
+    if not trial_status['is_trial_active']:
+        embed.add_field(
+            name="🚨 Action Required",
+            value="**Trial Expired!**\n• Add payment method to Railway\n• Upgrade to paid plan\n• Or migrate to another platform",
+            inline=False
+        )
+    elif trial_status['days_remaining'] <= 3 or credit <= 1.0:
+        embed.add_field(
+            name="⚠️ Prepare for Upgrade",
+            value="**Trial ending soon!**\n• Add payment method to Railway\n• Budget ~$3-5/month for this bot\n• Monitor usage in Railway dashboard",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="📊 Usage Info",
+            value=f"**Estimated monthly cost:** ${RAILWAY_CONFIG['estimated_monthly_cost']:.2f}\n**Trial started:** {RAILWAY_CONFIG['trial_start_date']}\n**Platform:** Railway",
+            inline=False
+        )
+    
+    embed.add_field(
+        name="🔧 Commands",
+        value=f"`{PREFIX}railway` - Check this status\n`{PREFIX}platforms` - Supported music platforms",
+        inline=False
+    )
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='update_trial', aliases=['set_trial'])
+async def update_trial_info(ctx, start_date: str = None, *, credit: float = None):
+    """Update Railway trial start date and/or credit amount.
+    
+    Usage: 
+    ?update_trial 2025-01-31 - Set trial start date
+    ?update_trial - Show current config
+    
+    Note: This only updates the bot's tracking, not Railway itself!
+    """
+    
+    if not start_date and credit is None:
+        # Show current configuration
+        embed = discord.Embed(
+            title="🔧 Current Railway Configuration",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="📅 Trial Start Date",
+            value=RAILWAY_CONFIG['trial_start_date'],
+            inline=True
+        )
+        
+        embed.add_field(
+            name="💰 Initial Credit",
+            value=f"${RAILWAY_CONFIG['initial_credit']:.2f}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📊 Estimated Monthly Cost",
+            value=f"${RAILWAY_CONFIG['estimated_monthly_cost']:.2f}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🔧 To Update",
+            value=f"`{PREFIX}update_trial 2025-01-31` - Set new start date\n\n**⚠️ Note:** This only updates bot tracking, not Railway itself!",
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        return
+    
+    # Validate and update start date
+    if start_date:
+        try:
+            # Validate date format
+            datetime.datetime.strptime(start_date, '%Y-%m-%d')
+            RAILWAY_CONFIG['trial_start_date'] = start_date
+            
+            embed = discord.Embed(
+                title="✅ Railway Configuration Updated",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="📅 New Trial Start Date",
+                value=start_date,
+                inline=False
+            )
+            
+            # Show updated status
+            trial_status = get_railway_trial_status()
+            embed.add_field(
+                name="📊 Updated Status",
+                value=f"Days remaining: {trial_status['days_remaining']}\nCredit remaining: ${trial_status['credit_remaining']:.2f}",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚠️ Important",
+                value="This only updates the bot's tracking. Make sure the date matches your actual Railway trial start date!",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+        except ValueError:
+            await ctx.send("❌ Invalid date format! Use YYYY-MM-DD format (e.g., 2025-01-31)")
+    
+    # Credit update can be added later if needed
+    if credit is not None:
+        await ctx.send("💡 Credit tracking update feature coming soon! For now, manually edit the bot config.")
 
 @bot.command(name='platforms', aliases=['sites', 'support'])
 async def supported_platforms(ctx):
