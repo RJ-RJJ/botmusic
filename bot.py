@@ -27,13 +27,7 @@ if not TOKEN:
     print("🔗 Get your token from: https://discord.com/developers/applications")
     exit(1)
 
-# Railway Trial Configuration (Update these values)
-RAILWAY_CONFIG = {
-    'trial_start_date': '2025-01-31',   # YYYY-MM-DD - ubah ke tanggal mulai trial Railway
-    'initial_credit': 5.00,            # $5 initial credit
-    'trial_duration_days': 30,         # 30 hari trial
-    'estimated_monthly_cost': 3.00     # Estimasi biaya per bulan untuk bot ini
-}
+
 
 # FFmpeg options (Enhanced for hosting stability)
 FFMPEG_OPTIONS = {
@@ -616,9 +610,6 @@ class VoiceState:
                 # Changed from raising error to logging - better for stability
         else:
             print(f"✅ Song '{song_title}' finished normally, moving to next")
-            # Increment total songs played counter
-            global total_songs_played
-            total_songs_played += 1
 
         self.next.set()
 
@@ -865,143 +856,20 @@ class VoiceState:
         self.current_playlist = None
         self.playlist_position = 0
 
-# Bot Statistics and Status Functions
-bot_start_time = datetime.datetime.now()
-total_songs_played = 0
-
-def get_uptime():
-    """Get bot uptime in a readable format"""
-    uptime = datetime.datetime.now() - bot_start_time
-    days = uptime.days
-    hours, remainder = divmod(uptime.seconds, 3600)
-    minutes, _ = divmod(remainder, 60)
-    
-    if days > 0:
-        return f"{days}d {hours}h {minutes}m"
-    elif hours > 0:
-        return f"{hours}h {minutes}m"
-    else:
-        return f"{minutes}m"
-
+# Simple Status System
 def get_server_count():
     """Get current server count"""
     return len(bot.guilds)
 
-def get_active_listeners():
-    """Get count of users currently listening to music"""
-    music_cog = bot.get_cog('Music')
-    if not music_cog:
-        return 0
-    
-    total_listeners = 0
-    for voice_state in music_cog.voice_states.values():
-        if voice_state.voice and voice_state.voice.channel and voice_state.is_playing:
-            # Count non-bot members in voice channel
-            listeners = len([m for m in voice_state.voice.channel.members if not m.bot])
-            total_listeners += listeners
-    
-    return total_listeners
-
-def get_cool_status_messages():
-    """Get list of cool status messages"""
+def get_simple_status_messages():
+    """Get simple 3-status rotation"""
     server_count = get_server_count()
-    uptime = get_uptime()
-    active_listeners = get_active_listeners()
     
-    cool_messages = [
-        f"{server_count} servers",
-        f"Uptime: {uptime}",
-        f"{total_songs_played} songs played",
-        f"{active_listeners} users vibing",
-        "🎵 Ready to rock!",
-        "🎧 Bass boosted!",
-        "🔥 Dropping beats",
-        "⚡ Lightning fast",
-        "🎶 Music to your ears",
-        "🚀 Powered by yt-dlp",
-        "🎸 Rock & roll!",
-        "🎤 Karaoke ready",
-        "🎹 Piano vibes",
-        "🥁 Drum machine",
-        "🎺 Jazz it up",
-        "🎻 Classical mood"
+    return [
+        "?help",  # Listening to ?help
+        f"{server_count} servers",  # Watching X servers
+        "This bot is under development"  # Playing: This bot is under development
     ]
-    
-    # Add server-specific messages
-    if server_count == 1:
-        cool_messages.append("1 exclusive server")
-    elif server_count < 5:
-        cool_messages.append(f"{server_count} cozy servers")
-    elif server_count < 20:
-        cool_messages.append(f"{server_count} awesome servers")
-    else:
-        cool_messages.append(f"{server_count} epic servers")
-    
-    # Add listener-specific messages
-    if active_listeners == 0:
-        cool_messages.extend(["Waiting for requests", "Ready to play", "Silent but ready"])
-    elif active_listeners == 1:
-        cool_messages.append("1 person jamming")
-    else:
-        cool_messages.append(f"{active_listeners} people jamming")
-    
-    return cool_messages
-
-# Railway Trial Status Functions (kept for railway command)
-def get_railway_trial_status():
-    """Calculate Railway trial days left and estimated credit remaining"""
-    try:
-        # Parse trial start date
-        start_date = datetime.datetime.strptime(RAILWAY_CONFIG['trial_start_date'], '%Y-%m-%d').date()
-        current_date = datetime.date.today()
-        
-        # Calculate days since trial started and days remaining
-        days_elapsed = (current_date - start_date).days
-        days_remaining = max(0, RAILWAY_CONFIG['trial_duration_days'] - days_elapsed)
-        
-        # Estimate credit usage (linear approximation)
-        daily_cost = RAILWAY_CONFIG['estimated_monthly_cost'] / 30
-        credit_used = days_elapsed * daily_cost
-        credit_remaining = max(0, RAILWAY_CONFIG['initial_credit'] - credit_used)
-        
-        return {
-            'days_remaining': days_remaining,
-            'credit_remaining': credit_remaining,
-            'is_trial_active': days_remaining > 0 and credit_remaining > 0
-        }
-    except Exception as e:
-        print(f"Error calculating Railway status: {e}")
-        return {
-            'days_remaining': 0,
-            'credit_remaining': 0.0,
-            'is_trial_active': False
-        }
-
-def format_railway_status():
-    """Format Railway trial status for bot status display"""
-    status = get_railway_trial_status()
-    
-    if not status['is_trial_active']:
-        return "Trial Expired - Need Upgrade"
-    
-    # Show days if more than 1 day left, otherwise show hours/urgent
-    if status['days_remaining'] > 1:
-        return f"Trial: {status['days_remaining']}d left"
-    elif status['days_remaining'] == 1:
-        return "Trial: Last Day!"
-    else:
-        return "Trial: Expired"
-
-def format_railway_credit():
-    """Format Railway credit status for bot status display"""
-    status = get_railway_trial_status()
-    
-    if status['credit_remaining'] <= 0:
-        return "Credit: $0.00 - Add funds!"
-    elif status['credit_remaining'] < 1.0:
-        return f"Credit: ${status['credit_remaining']:.2f} - Low!"
-    else:
-        return f"Credit: ${status['credit_remaining']:.2f}"
 
 # Bot setup
 intents = discord.Intents.default()
@@ -1685,10 +1553,17 @@ class Music(commands.Cog):
             if ctx.voice_client.channel != ctx.author.voice.channel:
                 raise commands.CommandError('Bot is already in a voice channel.')
 
-# Dynamic Status System
+# Simple Status System
 async def update_bot_status():
-    """Continuously update bot status with rotating cool information"""
+    """Simple 3-status rotation every 60 seconds"""
     await bot.wait_until_ready()
+    
+    status_messages = get_simple_status_messages()
+    activity_types = [
+        discord.ActivityType.listening,  # Listening to ?help
+        discord.ActivityType.watching,   # Watching X servers  
+        discord.ActivityType.playing     # Playing: This bot is under development
+    ]
     
     current_index = 0
     
@@ -1709,29 +1584,22 @@ async def update_bot_status():
                 status_text = f"🎵 {current_song[:45]}" + ("..." if len(current_song) > 45 else "")
                 activity_type = discord.ActivityType.listening
             else:
-                # Get fresh status messages and rotate through them
-                cool_messages = get_cool_status_messages()
-                status_text = cool_messages[current_index % len(cool_messages)]
+                # Rotate through simple status messages
+                status_messages = get_simple_status_messages()  # Refresh server count
+                status_text = status_messages[current_index % len(status_messages)]
+                activity_type = activity_types[current_index % len(activity_types)]
                 current_index += 1
-                
-                # Choose activity type based on content
-                if any(keyword in status_text.lower() for keyword in ["servers", "users", "uptime", "songs played"]):
-                    activity_type = discord.ActivityType.watching
-                elif any(keyword in status_text.lower() for keyword in ["jamming", "vibing", "ready", "waiting"]):
-                    activity_type = discord.ActivityType.listening
-                else:
-                    activity_type = discord.ActivityType.playing
             
             # Update bot presence
             activity = discord.Activity(type=activity_type, name=status_text)
             await bot.change_presence(activity=activity)
             
-            # Wait 12 seconds before next update (slightly faster rotation)
-            await asyncio.sleep(12)
+            # Wait 60 seconds before next update
+            await asyncio.sleep(60)
             
         except Exception as e:
             print(f"Error updating bot status: {e}")
-            await asyncio.sleep(30)  # Wait longer on error
+            await asyncio.sleep(60)  # Wait same time on error
 
 # Events
 @bot.event
@@ -1746,11 +1614,7 @@ async def on_ready():
     print(f'🎵 Using Python with yt-dlp')
     ffmpeg_type = "Local FFmpeg" if "ffmpeg.exe" in FFMPEG_EXECUTABLE else "System FFmpeg"
     print(f'🎵 FFmpeg: {ffmpeg_type} ({FFMPEG_EXECUTABLE})')
-    
-    # Show Railway trial info in logs
-    trial_status = get_railway_trial_status()
-    print(f'🚄 Railway Trial: {trial_status["days_remaining"]} days left, ${trial_status["credit_remaining"]:.2f} credit')
-    print(f'🎧 Status: Dynamic status system started')
+    print(f'🎧 Status: Simple 3-status rotation system started')
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -1831,11 +1695,10 @@ async def help_command(ctx):
     embed.add_field(
         name="🔧 **Troubleshooting & Info**",
         value=f"""
-`{PREFIX}stats` - Show cool bot statistics & status
+`{PREFIX}stats` - Show bot statistics & status
 `{PREFIX}debug` - Show bot status and diagnostics
 `{PREFIX}fix` - Restart audio player if stuck
 `{PREFIX}platforms` - Show supported platforms & alternatives
-`{PREFIX}railway` - Check hosting trial status & credits
         """,
         inline=False
     )
@@ -1866,174 +1729,11 @@ async def help_command(ctx):
     
     await ctx.send(embed=embed)
 
-@bot.command(name='railway', aliases=['trial', 'hosting'])
-async def railway_status(ctx):
-    """Shows Railway trial status and credit information."""
-    trial_status = get_railway_trial_status()
-    
-    embed = discord.Embed(
-        title="🚄 Railway Hosting Status",
-        color=discord.Color.green() if trial_status['is_trial_active'] else discord.Color.red()
-    )
-    
-    # Trial days remaining
-    if trial_status['days_remaining'] > 7:
-        status_emoji = "✅"
-        status_color = "**Good**"
-    elif trial_status['days_remaining'] > 3:
-        status_emoji = "⚠️"
-        status_color = "**Warning**"
-    elif trial_status['days_remaining'] > 0:
-        status_emoji = "🔴"
-        status_color = "**Critical**"
-    else:
-        status_emoji = "❌"
-        status_color = "**Expired**"
-    
-    embed.add_field(
-        name=f"{status_emoji} Trial Status",
-        value=f"{status_color}\n{trial_status['days_remaining']} days remaining",
-        inline=True
-    )
-    
-    # Credit remaining
-    credit = trial_status['credit_remaining']
-    if credit > 3.0:
-        credit_emoji = "💰"
-        credit_status = "**Healthy**"
-    elif credit > 1.0:
-        credit_emoji = "⚠️"
-        credit_status = "**Low**"
-    elif credit > 0:
-        credit_emoji = "🔴"
-        credit_status = "**Critical**"
-    else:
-        credit_emoji = "❌"
-        credit_status = "**Depleted**"
-    
-    embed.add_field(
-        name=f"{credit_emoji} Credit Status",
-        value=f"{credit_status}\n${credit:.2f} remaining",
-        inline=True
-    )
-    
-    # Next steps
-    if not trial_status['is_trial_active']:
-        embed.add_field(
-            name="🚨 Action Required",
-            value="**Trial Expired!**\n• Add payment method to Railway\n• Upgrade to paid plan\n• Or migrate to another platform",
-            inline=False
-        )
-    elif trial_status['days_remaining'] <= 3 or credit <= 1.0:
-        embed.add_field(
-            name="⚠️ Prepare for Upgrade",
-            value="**Trial ending soon!**\n• Add payment method to Railway\n• Budget ~$3-5/month for this bot\n• Monitor usage in Railway dashboard",
-            inline=False
-        )
-    else:
-        embed.add_field(
-            name="📊 Usage Info",
-            value=f"**Estimated monthly cost:** ${RAILWAY_CONFIG['estimated_monthly_cost']:.2f}\n**Trial started:** {RAILWAY_CONFIG['trial_start_date']}\n**Platform:** Railway",
-            inline=False
-        )
-    
-    embed.add_field(
-        name="🔧 Commands",
-        value=f"`{PREFIX}railway` - Check this status\n`{PREFIX}platforms` - Supported music platforms",
-        inline=False
-    )
-    
-    await ctx.send(embed=embed)
 
-@bot.command(name='update_trial', aliases=['set_trial'])
-async def update_trial_info(ctx, start_date: str = None, *, credit: float = None):
-    """Update Railway trial start date and/or credit amount.
-    
-    Usage: 
-    ?update_trial 2025-01-31 - Set trial start date
-    ?update_trial - Show current config
-    
-    Note: This only updates the bot's tracking, not Railway itself!
-    """
-    
-    if not start_date and credit is None:
-        # Show current configuration
-        embed = discord.Embed(
-            title="🔧 Current Railway Configuration",
-            color=discord.Color.blue()
-        )
-        
-        embed.add_field(
-            name="📅 Trial Start Date",
-            value=RAILWAY_CONFIG['trial_start_date'],
-            inline=True
-        )
-        
-        embed.add_field(
-            name="💰 Initial Credit",
-            value=f"${RAILWAY_CONFIG['initial_credit']:.2f}",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="📊 Estimated Monthly Cost",
-            value=f"${RAILWAY_CONFIG['estimated_monthly_cost']:.2f}",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="🔧 To Update",
-            value=f"`{PREFIX}update_trial 2025-01-31` - Set new start date\n\n**⚠️ Note:** This only updates bot tracking, not Railway itself!",
-            inline=False
-        )
-        
-        await ctx.send(embed=embed)
-        return
-    
-    # Validate and update start date
-    if start_date:
-        try:
-            # Validate date format
-            datetime.datetime.strptime(start_date, '%Y-%m-%d')
-            RAILWAY_CONFIG['trial_start_date'] = start_date
-            
-            embed = discord.Embed(
-                title="✅ Railway Configuration Updated",
-                color=discord.Color.green()
-            )
-            
-            embed.add_field(
-                name="📅 New Trial Start Date",
-                value=start_date,
-                inline=False
-            )
-            
-            # Show updated status
-            trial_status = get_railway_trial_status()
-            embed.add_field(
-                name="📊 Updated Status",
-                value=f"Days remaining: {trial_status['days_remaining']}\nCredit remaining: ${trial_status['credit_remaining']:.2f}",
-                inline=False
-            )
-            
-            embed.add_field(
-                name="⚠️ Important",
-                value="This only updates the bot's tracking. Make sure the date matches your actual Railway trial start date!",
-                inline=False
-            )
-            
-            await ctx.send(embed=embed)
-            
-        except ValueError:
-            await ctx.send("❌ Invalid date format! Use YYYY-MM-DD format (e.g., 2025-01-31)")
-    
-    # Credit update can be added later if needed
-    if credit is not None:
-        await ctx.send("💡 Credit tracking update feature coming soon! For now, manually edit the bot config.")
 
 @bot.command(name='stats', aliases=['statistics', 'info'])
 async def bot_stats(ctx):
-    """Shows cool bot statistics and current status."""
+    """Shows simple bot statistics and current status."""
     embed = discord.Embed(
         title="📊 Bot Statistics",
         description="Here are the current bot stats:",
@@ -2042,18 +1742,10 @@ async def bot_stats(ctx):
     
     # Basic stats
     server_count = get_server_count()
-    uptime = get_uptime()
-    active_listeners = get_active_listeners()
     
     embed.add_field(
         name="🌐 Server Info",
-        value=f"**Servers:** {server_count}\n**Active Listeners:** {active_listeners}\n**Uptime:** {uptime}",
-        inline=True
-    )
-    
-    embed.add_field(
-        name="🎵 Music Stats",
-        value=f"**Songs Played:** {total_songs_played}\n**Prefix:** `{PREFIX}`\n**Commands:** {len(bot.commands)}",
+        value=f"**Servers:** {server_count}\n**Prefix:** `{PREFIX}`\n**Commands:** {len(bot.commands)}",
         inline=True
     )
     
@@ -2088,17 +1780,15 @@ async def bot_stats(ctx):
         inline=True
     )
     
-    # Add current status rotation
-    current_statuses = get_cool_status_messages()
-    status_preview = "• " + "\n• ".join(current_statuses[:3]) + f"\n• ... and {len(current_statuses)-3} more!"
-    
+    # Simple Status Info
+    status_messages = get_simple_status_messages()
     embed.add_field(
         name="🎪 Status Rotation",
-        value=status_preview,
+        value=f"**Mode:** Simple 3-status rotation\n**Messages:** {len(status_messages)}\n\n**Preview:**\n• Listening to {status_messages[0]}\n• Watching {status_messages[1]}\n• Playing: {status_messages[2]}",
         inline=False
     )
     
-    embed.set_footer(text=f"Bot has been running for {uptime} • Use {PREFIX}help for commands")
+    embed.set_footer(text=f"Use {PREFIX}help for commands")
     
     await ctx.send(embed=embed)
 
