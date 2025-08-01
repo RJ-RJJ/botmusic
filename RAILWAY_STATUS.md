@@ -14,7 +14,7 @@ Bot status berubah setiap 15 detik:
 
 ### 📊 **Command Baru**
 
-#### `?railway` (aliases: `?trial`, `?status`)
+#### `?railway` (aliases: `?trial`, `?hosting`)
 Menampilkan detail status trial Railway:
 - ✅ Days remaining (dengan color coding)
 - 💰 Credit remaining (dengan warning)
@@ -129,7 +129,7 @@ Watching Credit: $4.20
 ```bash
 ?railway        # Detailed trial status
 ?trial          # Alias for ?railway  
-?status         # Alias for ?railway
+?hosting        # Alias for ?railway
 ?update_trial   # Update trial config
 ?set_trial      # Alias for ?update_trial
 ```

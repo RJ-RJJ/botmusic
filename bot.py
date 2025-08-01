@@ -1784,7 +1784,7 @@ async def help_command(ctx):
     
     await ctx.send(embed=embed)
 
-@bot.command(name='railway', aliases=['trial', 'status'])
+@bot.command(name='railway', aliases=['trial', 'hosting'])
 async def railway_status(ctx):
     """Shows Railway trial status and credit information."""
     trial_status = get_railway_trial_status()
