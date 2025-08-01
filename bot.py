@@ -471,7 +471,7 @@ class VoiceState:
                             print("⏰ No playlist auto-load available, stopping player")
                             self.bot.loop.create_task(self.stop())
                             return
-                    
+
                     # After getting a song, check if we need to auto-load more (for future)
                     await self.check_playlist_auto_load()
                 else:
@@ -616,6 +616,9 @@ class VoiceState:
                 # Changed from raising error to logging - better for stability
         else:
             print(f"✅ Song '{song_title}' finished normally, moving to next")
+            # Increment total songs played counter
+            global total_songs_played
+            total_songs_played += 1
 
         self.next.set()
 
@@ -862,7 +865,89 @@ class VoiceState:
         self.current_playlist = None
         self.playlist_position = 0
 
-# Railway Trial Status Functions
+# Bot Statistics and Status Functions
+bot_start_time = datetime.datetime.now()
+total_songs_played = 0
+
+def get_uptime():
+    """Get bot uptime in a readable format"""
+    uptime = datetime.datetime.now() - bot_start_time
+    days = uptime.days
+    hours, remainder = divmod(uptime.seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    
+    if days > 0:
+        return f"{days}d {hours}h {minutes}m"
+    elif hours > 0:
+        return f"{hours}h {minutes}m"
+    else:
+        return f"{minutes}m"
+
+def get_server_count():
+    """Get current server count"""
+    return len(bot.guilds)
+
+def get_active_listeners():
+    """Get count of users currently listening to music"""
+    music_cog = bot.get_cog('Music')
+    if not music_cog:
+        return 0
+    
+    total_listeners = 0
+    for voice_state in music_cog.voice_states.values():
+        if voice_state.voice and voice_state.voice.channel and voice_state.is_playing:
+            # Count non-bot members in voice channel
+            listeners = len([m for m in voice_state.voice.channel.members if not m.bot])
+            total_listeners += listeners
+    
+    return total_listeners
+
+def get_cool_status_messages():
+    """Get list of cool status messages"""
+    server_count = get_server_count()
+    uptime = get_uptime()
+    active_listeners = get_active_listeners()
+    
+    cool_messages = [
+        f"{server_count} servers",
+        f"Uptime: {uptime}",
+        f"{total_songs_played} songs played",
+        f"{active_listeners} users vibing",
+        "🎵 Ready to rock!",
+        "🎧 Bass boosted!",
+        "🔥 Dropping beats",
+        "⚡ Lightning fast",
+        "🎶 Music to your ears",
+        "🚀 Powered by yt-dlp",
+        "🎸 Rock & roll!",
+        "🎤 Karaoke ready",
+        "🎹 Piano vibes",
+        "🥁 Drum machine",
+        "🎺 Jazz it up",
+        "🎻 Classical mood"
+    ]
+    
+    # Add server-specific messages
+    if server_count == 1:
+        cool_messages.append("1 exclusive server")
+    elif server_count < 5:
+        cool_messages.append(f"{server_count} cozy servers")
+    elif server_count < 20:
+        cool_messages.append(f"{server_count} awesome servers")
+    else:
+        cool_messages.append(f"{server_count} epic servers")
+    
+    # Add listener-specific messages
+    if active_listeners == 0:
+        cool_messages.extend(["Waiting for requests", "Ready to play", "Silent but ready"])
+    elif active_listeners == 1:
+        cool_messages.append("1 person jamming")
+    else:
+        cool_messages.append(f"{active_listeners} people jamming")
+    
+    return cool_messages
+
+# Railway Trial Status Functions (kept for railway command)
 def get_railway_trial_status():
     """Calculate Railway trial days left and estimated credit remaining"""
     try:
@@ -1602,15 +1687,8 @@ class Music(commands.Cog):
 
 # Dynamic Status System
 async def update_bot_status():
-    """Continuously update bot status with rotating information"""
+    """Continuously update bot status with rotating cool information"""
     await bot.wait_until_ready()
-    
-    status_messages = [
-        "?help",
-        format_railway_status(),
-        format_railway_credit(),
-        "🎵 Music Bot Ready"
-    ]
     
     current_index = 0
     
@@ -1628,25 +1706,28 @@ async def update_bot_status():
             # Choose status message
             if current_song:
                 # If music is playing, show song name
-                status_text = f"🎵 {current_song[:50]}" + ("..." if len(current_song) > 50 else "")
+                status_text = f"🎵 {current_song[:45]}" + ("..." if len(current_song) > 45 else "")
                 activity_type = discord.ActivityType.listening
             else:
-                # Rotate through status messages
-                status_text = status_messages[current_index % len(status_messages)]
+                # Get fresh status messages and rotate through them
+                cool_messages = get_cool_status_messages()
+                status_text = cool_messages[current_index % len(cool_messages)]
                 current_index += 1
                 
                 # Choose activity type based on content
-                if "Trial" in status_text or "Credit" in status_text:
+                if any(keyword in status_text.lower() for keyword in ["servers", "users", "uptime", "songs played"]):
                     activity_type = discord.ActivityType.watching
-                else:
+                elif any(keyword in status_text.lower() for keyword in ["jamming", "vibing", "ready", "waiting"]):
                     activity_type = discord.ActivityType.listening
+                else:
+                    activity_type = discord.ActivityType.playing
             
             # Update bot presence
             activity = discord.Activity(type=activity_type, name=status_text)
             await bot.change_presence(activity=activity)
             
-            # Wait 15 seconds before next update
-            await asyncio.sleep(15)
+            # Wait 12 seconds before next update (slightly faster rotation)
+            await asyncio.sleep(12)
             
         except Exception as e:
             print(f"Error updating bot status: {e}")
@@ -1748,8 +1829,9 @@ async def help_command(ctx):
     )
     
     embed.add_field(
-        name="🔧 **Troubleshooting**",
+        name="🔧 **Troubleshooting & Info**",
         value=f"""
+`{PREFIX}stats` - Show cool bot statistics & status
 `{PREFIX}debug` - Show bot status and diagnostics
 `{PREFIX}fix` - Restart audio player if stuck
 `{PREFIX}platforms` - Show supported platforms & alternatives
@@ -1948,6 +2030,77 @@ async def update_trial_info(ctx, start_date: str = None, *, credit: float = None
     # Credit update can be added later if needed
     if credit is not None:
         await ctx.send("💡 Credit tracking update feature coming soon! For now, manually edit the bot config.")
+
+@bot.command(name='stats', aliases=['statistics', 'info'])
+async def bot_stats(ctx):
+    """Shows cool bot statistics and current status."""
+    embed = discord.Embed(
+        title="📊 Bot Statistics",
+        description="Here are the current bot stats:",
+        color=discord.Color.purple()
+    )
+    
+    # Basic stats
+    server_count = get_server_count()
+    uptime = get_uptime()
+    active_listeners = get_active_listeners()
+    
+    embed.add_field(
+        name="🌐 Server Info",
+        value=f"**Servers:** {server_count}\n**Active Listeners:** {active_listeners}\n**Uptime:** {uptime}",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🎵 Music Stats",
+        value=f"**Songs Played:** {total_songs_played}\n**Prefix:** `{PREFIX}`\n**Commands:** {len(bot.commands)}",
+        inline=True
+    )
+    
+    # Current activity
+    music_cog = bot.get_cog('Music')
+    active_guilds = 0
+    total_queue = 0
+    if music_cog:
+        for voice_state in music_cog.voice_states.values():
+            if voice_state.is_playing:
+                active_guilds += 1
+            total_queue += len(voice_state.songs)
+    
+    embed.add_field(
+        name="🎧 Current Activity",
+        value=f"**Active Music:** {active_guilds} servers\n**Total Queue:** {total_queue} songs\n**Bot Status:** Online ✅",
+        inline=True
+    )
+    
+    # Performance info
+    import platform
+    embed.add_field(
+        name="⚡ Performance",
+        value=f"**Platform:** {platform.system()}\n**Python:** {platform.python_version()}\n**Discord.py:** {discord.__version__}",
+        inline=True
+    )
+    
+    # Cool features
+    embed.add_field(
+        name="🚀 Features",
+        value="**⚡ Fast Playlist Loading**\n**🎵 Auto Queue**\n**🔄 Background Loading**\n**📱 Multi-Platform Support**",
+        inline=True
+    )
+    
+    # Add current status rotation
+    current_statuses = get_cool_status_messages()
+    status_preview = "• " + "\n• ".join(current_statuses[:3]) + f"\n• ... and {len(current_statuses)-3} more!"
+    
+    embed.add_field(
+        name="🎪 Status Rotation",
+        value=status_preview,
+        inline=False
+    )
+    
+    embed.set_footer(text=f"Bot has been running for {uptime} • Use {PREFIX}help for commands")
+    
+    await ctx.send(embed=embed)
 
 @bot.command(name='platforms', aliases=['sites', 'support'])
 async def supported_platforms(ctx):
