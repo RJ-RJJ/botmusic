@@ -50,14 +50,14 @@ class MusicBot(commands.Bot):
         """Called when bot is ready and connected"""
         print(f'✅ Bot ready! Logged in as {self.user}')
         print(f'🎵 Connected to {len(self.guilds)} servers')
-    print(f'🎵 Using Python with yt-dlp')
+        print(f'🎵 Using Python with yt-dlp')
         
         # Import FFMPEG_EXECUTABLE here to avoid circular imports
         from config.settings import FFMPEG_EXECUTABLE
-    ffmpeg_type = "Local FFmpeg" if "ffmpeg.exe" in FFMPEG_EXECUTABLE else "System FFmpeg"
-    print(f'🎵 FFmpeg: {ffmpeg_type} ({FFMPEG_EXECUTABLE})')
-    print(f'🎧 Status: Simple 3-status rotation system started')
-
+        ffmpeg_type = "Local FFmpeg" if "ffmpeg.exe" in FFMPEG_EXECUTABLE else "System FFmpeg"
+        print(f'🎵 FFmpeg: {ffmpeg_type} ({FFMPEG_EXECUTABLE})')
+        print(f'🎧 Status: Simple 3-status rotation system started')
+        
         # Start dynamic status updater
         self.loop.create_task(update_bot_status())
         
@@ -67,18 +67,18 @@ class MusicBot(commands.Bot):
     
     async def on_command_error(self, ctx, error):
         """Global error handler"""
-    if isinstance(error, commands.NoPrivateMessage):
-        await ctx.author.send('This command cannot be used in private messages.')
-    elif isinstance(error, commands.DisabledCommand):
-        await ctx.author.send('Sorry. This command is disabled and cannot be used.')
-    elif isinstance(error, commands.CommandInvokeError):
-        print(f'In {ctx.command.qualified_name}:')
-        print(f'{error.original.__class__.__name__}: {error.original}')
+        if isinstance(error, commands.NoPrivateMessage):
+            await ctx.author.send('This command cannot be used in private messages.')
+        elif isinstance(error, commands.DisabledCommand):
+            await ctx.author.send('Sorry. This command is disabled and cannot be used.')
+        elif isinstance(error, commands.CommandInvokeError):
+            print(f'In {ctx.command.qualified_name}:')
+            print(f'{error.original.__class__.__name__}: {error.original}')
         elif isinstance(error, commands.MissingPermissions):
             await ctx.send(f"❌ You don't have permission to use this command.")
         elif isinstance(error, commands.BotMissingPermissions):
             await ctx.send(f"❌ I don't have the required permissions to do that.")
-            else:
+        else:
             # Log unexpected errors
             print(f"Unexpected error in {ctx.command}: {error}")
     
