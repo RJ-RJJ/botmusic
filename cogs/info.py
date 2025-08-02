@@ -13,6 +13,7 @@ from utils.cache_manager import cache_manager
 from utils.database_manager import database_manager
 from utils.logging_manager import logging_manager
 from utils.health_monitor import health_monitor
+from utils.ui_enhancements import EnhancedEmbed, format_duration, format_file_size
 
 class Info(commands.Cog):
     """Information and help commands"""

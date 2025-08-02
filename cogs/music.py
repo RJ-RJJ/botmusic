@@ -13,6 +13,10 @@ from utils.song import Song
 from utils.exceptions import VoiceError, YTDLError
 from utils.error_handler import error_handler
 from utils.database_manager import database_manager
+from utils.ui_enhancements import (
+    LoadingIndicator, EnhancedEmbed, SmartPlaybackFeedback,
+    InteractionEnhancer, ProgressBar, format_duration
+)
 from config.settings import PREFIX
 
 class Music(commands.Cog):
@@ -125,9 +129,46 @@ class Music(commands.Cog):
 
     @commands.command(name='now', aliases=['current', 'playing'])
     async def _now(self, ctx: commands.Context):
-        """Displays the currently playing song."""
-
-        await ctx.send(embed=ctx.voice_state.current.create_embed())
+        """Displays the currently playing song with enhanced details."""
+        
+        if not ctx.voice_state.current:
+            embed = EnhancedEmbed.create_music_embed(
+                "No Music Playing", 
+                "📭 Nothing is currently playing.\nUse `?play <song>` to start playing music!",
+                discord.Color.orange()
+            )
+            return await ctx.send(embed=embed)
+        
+        # Create song info dict  
+        current_song = ctx.voice_state.current.source
+        song_info = {
+            'title': current_song.title,
+            'uploader': current_song.uploader,
+            'duration': getattr(current_song, 'duration', 0),
+            'thumbnail': getattr(current_song, 'thumbnail', None),
+            'webpage_url': getattr(current_song, 'webpage_url', None)
+        }
+        
+        # Create enhanced now playing embed
+        embed = EnhancedEmbed.create_now_playing_embed(song_info, ctx.voice_state)
+        
+        # Add additional playback info
+        if ctx.voice_state.loop:
+            embed.add_field(
+                name="🔁 Loop Mode",
+                value="Current song will repeat",
+                inline=True
+            )
+        
+        # Add requester info if available
+        if hasattr(ctx.voice_state.current, 'requester'):
+            embed.add_field(
+                name="👤 Requested by",
+                value=ctx.voice_state.current.requester.mention,
+                inline=True
+            )
+        
+        await ctx.send(embed=embed)
 
     @commands.command(name='pause')
     @commands.has_permissions(manage_guild=True)
@@ -555,12 +596,47 @@ class Music(commands.Cog):
                     print(f"Failed to extract playlist, trying as single video: {e}")
                     # Fall through to single song handling
             
-            # Single song handling (original behavior)
+            # Single song handling with enhanced UI feedback
+            loading = LoadingIndicator(ctx, "🔍 Searching for song...")
+            
             try:
+                # Start loading animation
+                await loading.start(animation_type='music', update_interval=0.8)
+                
+                # Update loading stages
+                await loading.update_stage(0)  # Searching
+                await asyncio.sleep(0.5)
+                
+                await loading.update_stage(1)  # Connecting
                 source = await YTDLSource.create_source(ctx, search, loop=self.bot.loop)
+                
+                await loading.update_stage(2)  # Extracting
                 song = Song(source)
+                
+                await loading.update_stage(3)  # Preparing
                 await ctx.voice_state.songs.put(song)
-                await ctx.send('🎵 Enqueued {}'.format(str(source)))
+                
+                # Stop loading and show final result
+                queue_position = len(ctx.voice_state.songs)
+                is_playing_now = queue_position <= 1 and not ctx.voice_state.is_playing
+                
+                await loading.stop(
+                    final_message="✅ Song added successfully!",
+                    final_color=discord.Color.green()
+                )
+                
+                # Send enhanced feedback
+                song_info = {
+                    'title': source.title,
+                    'uploader': source.uploader,
+                    'duration': source.duration,
+                    'thumbnail': getattr(source, 'thumbnail', None),
+                    'webpage_url': getattr(source, 'webpage_url', None)
+                }
+                
+                await SmartPlaybackFeedback.send_song_added_feedback(
+                    ctx, song_info, queue_position, is_playing_now
+                )
                 
                 # Track user activity in database
                 await database_manager.track_user_activity(
@@ -571,8 +647,13 @@ class Music(commands.Cog):
                 # Initialize guild settings if not exists
                 guild_settings = await database_manager.get_guild_settings(ctx.guild.id, ctx.guild.name)
                 
-                # Note: Audio player task is already running and will start playback automatically
             except (YTDLError, Exception) as e:
+                # Stop loading with error
+                await loading.stop(
+                    final_message="❌ Failed to add song",
+                    final_color=discord.Color.red()
+                )
+                
                 # Use centralized error handler for better user experience
                 await error_handler.handle_error(e, ctx, f"Failed to process: {search}")
     
