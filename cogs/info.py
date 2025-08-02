@@ -10,6 +10,7 @@ from utils.helpers import get_server_count, get_simple_status_messages
 from utils.memory_manager import memory_manager
 from utils.error_handler import error_handler
 from utils.cache_manager import cache_manager
+from utils.database_manager import database_manager
 
 class Info(commands.Cog):
     """Information and help commands"""
@@ -67,6 +68,9 @@ class Info(commands.Cog):
     `{PREFIX}errors` - Show error statistics (Admin)
     `{PREFIX}cache` - Show cache statistics (Admin)
     `{PREFIX}cache_clear` - Clear all caches (Admin)
+    `{PREFIX}database` - Show database statistics (Admin)
+    `{PREFIX}popular` - Show most popular songs
+    `{PREFIX}user_stats` - Show your music statistics
             """,
             inline=False
         )
@@ -596,6 +600,228 @@ class Info(commands.Cog):
         except Exception as e:
             embed.title = "❌ Cache Warming Failed"
             embed.description = f"Error during cache warming: {str(e)}"
+            embed.color = discord.Color.red()
+            await msg.edit(embed=embed)
+
+    @commands.command(name='database', aliases=['db', 'db_stats'])
+    @commands.has_permissions(manage_guild=True)
+    async def database_statistics(self, ctx):
+        """Shows database statistics and performance metrics."""
+        stats = await database_manager.get_database_stats()
+        
+        embed = discord.Embed(
+            title="🗄️ Database Statistics",
+            description="Database storage and performance metrics:",
+            color=discord.Color.purple()
+        )
+        
+        # Database Overview
+        embed.add_field(
+            name="📊 Database Overview",
+            value=f"**Size:** {stats.get('database_size_mb', 0)} MB\n"
+                  f"**Operations:** {stats.get('db_operations', 0)}\n"
+                  f"**Cache Hit Rate:** {stats.get('cache_hit_rate', 0)}%",
+            inline=True
+        )
+        
+        # Table Counts
+        table_info = ""
+        table_counts = {
+            'guild_settings_count': '⚙️ Guild Settings',
+            'user_statistics_count': '👥 User Stats',
+            'music_analytics_count': '🎵 Music Data',
+            'bot_metrics_count': '📈 Bot Metrics',
+            'error_logs_count': '🚨 Error Logs',
+            'cache_persistence_count': '💾 Cache Data'
+        }
+        
+        for key, label in table_counts.items():
+            count = stats.get(key, 0)
+            table_info += f"{label}: {count}\n"
+        
+        embed.add_field(
+            name="📋 Data Tables",
+            value=table_info,
+            inline=True
+        )
+        
+        # Performance Metrics
+        performance_info = f"**DB Cache Hits:** {stats.get('cache_hits', 0)}\n"
+        performance_info += f"**DB Cache Misses:** {stats.get('cache_misses', 0)}\n"
+        performance_info += f"**Total DB Queries:** {stats.get('db_operations', 0)}"
+        
+        embed.add_field(
+            name="⚡ Performance",
+            value=performance_info,
+            inline=False
+        )
+        
+        embed.set_footer(text="Use ?db_optimize to optimize database performance")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='popular', aliases=['top_songs', 'most_played'])
+    async def popular_songs(self, ctx, scope: str = "server"):
+        """Show most popular songs (server/global)."""
+        
+        if scope.lower() in ['global', 'all']:
+            songs = await database_manager.get_popular_songs(guild_id=None, limit=10)
+            title = "🌟 Most Popular Songs (Global)"
+        else:
+            songs = await database_manager.get_popular_songs(guild_id=ctx.guild.id, limit=10)
+            title = f"🌟 Most Popular Songs in {ctx.guild.name}"
+        
+        if not songs:
+            return await ctx.send("📊 **No music data available yet.**\nPlay some songs to see statistics!")
+        
+        embed = discord.Embed(
+            title=title,
+            color=discord.Color.gold()
+        )
+        
+        song_list = ""
+        for i, song in enumerate(songs, 1):
+            play_count = song.get('play_count', song.get('total_plays', 0))
+            artist = song.get('artist', 'Unknown Artist')
+            title_text = song.get('song_title', 'Unknown Song')
+            
+            # Truncate long titles
+            if len(title_text) > 40:
+                title_text = title_text[:40] + "..."
+            
+            song_list += f"**{i}.** {title_text}\n"
+            song_list += f"    🎤 {artist} • 🔄 {play_count} plays\n\n"
+        
+        embed.description = song_list
+        embed.set_footer(text="Statistics update in real-time as songs are played")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='user_stats', aliases=['my_stats', 'profile'])
+    async def user_statistics(self, ctx, user: discord.Member = None):
+        """Show music statistics for a user."""
+        
+        target_user = user or ctx.author
+        stats = await database_manager.get_user_statistics(target_user.id, ctx.guild.id)
+        
+        if not stats:
+            if target_user == ctx.author:
+                return await ctx.send("📊 **You haven't played any music yet!**\nUse `?play <song>` to start building your statistics.")
+            else:
+                return await ctx.send(f"📊 **{target_user.display_name} hasn't played any music in this server yet.**")
+        
+        embed = discord.Embed(
+            title=f"🎵 Music Stats for {target_user.display_name}",
+            color=discord.Color.blue()
+        )
+        
+        # Listening Statistics
+        total_time = stats.get('total_listening_time', 0)
+        hours = total_time // 3600
+        minutes = (total_time % 3600) // 60
+        
+        embed.add_field(
+            name="📊 Listening Stats",
+            value=f"**Songs Played:** {stats.get('total_songs_played', 0)}\n"
+                  f"**Listening Time:** {hours}h {minutes}m\n"
+                  f"**Commands Used:** {stats.get('commands_used', 0)}",
+            inline=True
+        )
+        
+        # Activity Info
+        embed.add_field(
+            name="📅 Activity",
+            value=f"**Playlists Created:** {stats.get('playlists_created', 0)}\n"
+                  f"**Last Active:** {stats.get('last_active', 'Never')[:10]}\n"
+                  f"**Favorite Genre:** {stats.get('favorite_genre') or 'Not set'}",
+            inline=True
+        )
+        
+        embed.set_thumbnail(url=target_user.display_avatar.url)
+        embed.set_footer(text="Your stats update automatically as you use the bot")
+        
+        await ctx.send(embed=embed)
+
+    @commands.command(name='db_optimize', aliases=['optimize_db'])
+    @commands.has_permissions(administrator=True)
+    async def optimize_database(self, ctx):
+        """Optimize database performance (Admin only)."""
+        
+        embed = discord.Embed(
+            title="🔧 Database Optimization",
+            description="Optimizing database performance...",
+            color=discord.Color.orange()
+        )
+        
+        msg = await ctx.send(embed=embed)
+        
+        try:
+            success = await database_manager.optimize_database()
+            
+            if success:
+                embed.title = "✅ Database Optimization Complete"
+                embed.description = "Database has been optimized successfully"
+                embed.color = discord.Color.green()
+                
+                # Get updated stats
+                stats = await database_manager.get_database_stats()
+                embed.add_field(
+                    name="📊 Results",
+                    value=f"**New Size:** {stats.get('database_size_mb', 0)} MB\n"
+                          f"**Cache Performance:** {stats.get('cache_hit_rate', 0)}%\n"
+                          f"**Total Operations:** {stats.get('db_operations', 0)}",
+                    inline=False
+                )
+            else:
+                embed.title = "❌ Database Optimization Failed"
+                embed.description = "There was an error during optimization"
+                embed.color = discord.Color.red()
+            
+            await msg.edit(embed=embed)
+            
+        except Exception as e:
+            embed.title = "❌ Database Optimization Error"
+            embed.description = f"Error during optimization: {str(e)}"
+            embed.color = discord.Color.red()
+            await msg.edit(embed=embed)
+
+    @commands.command(name='db_backup', aliases=['backup_db'])
+    @commands.has_permissions(administrator=True)
+    async def backup_database(self, ctx):
+        """Create database backup (Admin only)."""
+        
+        embed = discord.Embed(
+            title="💾 Database Backup",
+            description="Creating database backup...",
+            color=discord.Color.blue()
+        )
+        
+        msg = await ctx.send(embed=embed)
+        
+        try:
+            success = await database_manager.backup_database()
+            
+            if success:
+                embed.title = "✅ Database Backup Complete"
+                embed.description = "Database backup created successfully"
+                embed.color = discord.Color.green()
+                
+                stats = await database_manager.get_database_stats()
+                embed.add_field(
+                    name="📊 Backup Info",
+                    value=f"**Original Size:** {stats.get('database_size_mb', 0)} MB\n"
+                          f"**Tables Backed Up:** 6\n"
+                          f"**Location:** data/backups/",
+                    inline=False
+                )
+            else:
+                embed.title = "❌ Database Backup Failed"
+                embed.description = "There was an error during backup"
+                embed.color = discord.Color.red()
+            
+            await msg.edit(embed=embed)
+            
+        except Exception as e:
+            embed.title = "❌ Database Backup Error"
+            embed.description = f"Error during backup: {str(e)}"
             embed.color = discord.Color.red()
             await msg.edit(embed=embed)
 

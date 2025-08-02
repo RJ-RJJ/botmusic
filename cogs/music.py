@@ -12,6 +12,7 @@ from utils.ytdl_source import YTDLSource
 from utils.song import Song
 from utils.exceptions import VoiceError, YTDLError
 from utils.error_handler import error_handler
+from utils.database_manager import database_manager
 from config.settings import PREFIX
 
 class Music(commands.Cog):
@@ -560,6 +561,15 @@ class Music(commands.Cog):
                 song = Song(source)
                 await ctx.voice_state.songs.put(song)
                 await ctx.send('🎵 Enqueued {}'.format(str(source)))
+                
+                # Track user activity in database
+                await database_manager.track_user_activity(
+                    ctx.author.id, ctx.guild.id, str(ctx.author), 'song_queued',
+                    {'song_title': source.title, 'search_query': search}
+                )
+                
+                # Initialize guild settings if not exists
+                guild_settings = await database_manager.get_guild_settings(ctx.guild.id, ctx.guild.name)
                 
                 # Note: Audio player task is already running and will start playback automatically
             except (YTDLError, Exception) as e:

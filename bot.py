@@ -7,6 +7,7 @@ Refactored version with better code organization and maintainability
 import discord
 from discord.ext import commands
 import asyncio
+import time
 
 # Import configuration
 from config import TOKEN, PREFIX, get_bot_intents
@@ -20,6 +21,7 @@ from utils import (
 from utils.memory_manager import memory_manager
 from utils.error_handler import error_handler
 from utils.cache_manager import cache_manager
+from utils.database_manager import database_manager
 
 # Import cogs
 from cogs import Music, Info
@@ -71,6 +73,16 @@ class MusicBot(commands.Bot):
         await cache_manager.load_cache_from_disk()
         await cache_manager.start_background_cleanup(interval=600)  # 10 minutes
         print(f'⚡ Cache system initialized with background cleanup')
+        
+        # Initialize database system
+        await database_manager.initialize_database()
+        
+        # Record bot startup metric
+        await database_manager.record_metric('bot_startup', 1, metadata={
+            'servers': len(self.guilds),
+            'timestamp': time.time()
+        })
+        print(f'🗄️ Database system initialized and startup recorded')
     
     async def on_command_error(self, ctx, error):
         """Global error handler using centralized error handling system"""
