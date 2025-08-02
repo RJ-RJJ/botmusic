@@ -1,6 +1,6 @@
 """
 VoiceState class for Discord Music Bot
-Manages voice connection, queue, and playback state for each guild
+Manages voice connection, queue, and playback state for each guild with memory management
 """
 import asyncio
 from discord.ext import commands
@@ -8,6 +8,7 @@ import discord
 from utils.song_queue import SongQueue
 from utils.song import Song
 from utils.ytdl_source import YTDLSource
+from utils.memory_manager import memory_manager
 from config.settings import (
     PLAYLIST_BATCH_SIZE, 
     PLAYLIST_LOW_THRESHOLD, 
@@ -45,9 +46,45 @@ class VoiceState:
         self._background_loading = False  # Flag to prevent multiple background loads
 
         self.audio_player = bot.loop.create_task(self.audio_player_task())
+        
+        # Track voice state for memory management
+        memory_manager.track_object(self, 'voice_state')
 
     def __del__(self):
-        self.audio_player.cancel()
+        """Destructor with proper cleanup"""
+        try:
+            if hasattr(self, 'audio_player') and self.audio_player:
+                self.audio_player.cancel()
+            self.cleanup_resources()
+        except:
+            pass
+    
+    def cleanup_resources(self):
+        """Manual cleanup of resources"""
+        try:
+            # Cleanup current song
+            if self.current and hasattr(self.current, 'source'):
+                if hasattr(self.current.source, 'cleanup'):
+                    self.current.source.cleanup()
+            
+            # Cleanup songs in queue
+            while not self.songs.empty():
+                try:
+                    song = self.songs.get_nowait()
+                    if hasattr(song, 'source') and hasattr(song.source, 'cleanup'):
+                        song.source.cleanup()
+                except:
+                    break
+            
+            # Clear playlist data
+            if self.current_playlist and isinstance(self.current_playlist, dict):
+                self.current_playlist.clear()
+            
+            # Remove from memory tracking
+            memory_manager.untrack_object(self)
+            
+        except Exception as e:
+            print(f"⚠️ Error during VoiceState cleanup: {e}")
 
     @property
     def loop(self):
@@ -267,7 +304,21 @@ class VoiceState:
             self.voice.stop()
 
     async def stop(self):
-        """Stop playback and clear queue"""
+        """Stop playback and clear queue with proper cleanup"""
+        # Cleanup current song
+        if self.current and hasattr(self.current, 'source'):
+            if hasattr(self.current.source, 'cleanup'):
+                self.current.source.cleanup()
+        
+        # Cleanup all songs in queue
+        while not self.songs.empty():
+            try:
+                song = self.songs.get_nowait()
+                if hasattr(song, 'source') and hasattr(song.source, 'cleanup'):
+                    song.source.cleanup()
+            except:
+                break
+        
         self.songs.clear()
         
         # Cancel disconnect timer if it exists
@@ -275,9 +326,14 @@ class VoiceState:
             self.disconnect_timer.cancel()
             self.disconnect_timer = None
 
+        # Cleanup voice connection
         if self.voice:
-            await self.voice.disconnect()
+            # Track voice connection for cleanup
+            await memory_manager.cleanup_voice_connection(self.voice)
             self.voice = None
+        
+        # Manual cleanup of resources
+        self.cleanup_resources()
     
     def start_disconnect_timer(self):
         """Start a timer to disconnect if bot is alone for too long"""

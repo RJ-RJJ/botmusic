@@ -15,6 +15,7 @@ from .helpers import (
     update_bot_status,
     on_voice_state_update_handler
 )
+from .memory_manager import memory_manager
 
 __all__ = [
     'VoiceError',
@@ -27,5 +28,6 @@ __all__ = [
     'get_server_count',
     'get_simple_status_messages',
     'update_bot_status',
-    'on_voice_state_update_handler'
+    'on_voice_state_update_handler',
+    'memory_manager'
 ]

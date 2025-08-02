@@ -17,6 +17,7 @@ from utils import (
     update_bot_status, 
     on_voice_state_update_handler
 )
+from utils.memory_manager import memory_manager
 
 # Import cogs
 from cogs import Music, Info
@@ -59,6 +60,10 @@ class MusicBot(commands.Bot):
         
         # Start dynamic status updater
         self.loop.create_task(update_bot_status())
+        
+        # Start memory manager periodic cleanup (every 5 minutes)
+        memory_manager.start_periodic_cleanup(self.loop, interval=300)
+        print(f'🧠 Memory manager started with 5-minute cleanup cycle')
     
     async def on_command_error(self, ctx, error):
         """Global error handler"""

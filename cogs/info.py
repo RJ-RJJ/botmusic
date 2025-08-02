@@ -7,6 +7,7 @@ from discord.ext import commands
 import platform
 from config.settings import PREFIX
 from utils.helpers import get_server_count, get_simple_status_messages
+from utils.memory_manager import memory_manager
 
 class Info(commands.Cog):
     """Information and help commands"""
@@ -220,6 +221,124 @@ class Info(commands.Cog):
             """,
             inline=False
         )
+        
+        await ctx.send(embed=embed)
+
+    @commands.command(name='memory', aliases=['mem', 'ram'])
+    @commands.has_permissions(manage_guild=True)
+    async def memory_stats(self, ctx):
+        """Shows memory usage and management statistics."""
+        embed = discord.Embed(
+            title="🧠 Memory Management",
+            description="Current memory usage and tracking statistics:",
+            color=discord.Color.orange()
+        )
+        
+        # Get memory stats
+        stats = memory_manager.get_memory_stats()
+        
+        if 'error' in stats:
+            embed.add_field(
+                name="❌ Error",
+                value="Could not retrieve memory statistics",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="📊 Memory Usage",
+                value=f"**RSS:** {stats['rss_mb']:.1f} MB\n"
+                      f"**VMS:** {stats['vms_mb']:.1f} MB\n"
+                      f"**Percent:** {stats['percent']:.1f}%",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="🎵 Tracked Objects",
+                value=f"**Total:** {stats['tracked_objects']}\n"
+                      f"**Audio Sources:** {stats['audio_sources']}\n"
+                      f"**Voice Connections:** {stats['voice_connections']}\n"
+                      f"**YTDL Instances:** {stats['ytdl_instances']}",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="🧹 Cleanup Stats",
+                value=f"**Total Freed:** {stats['total_freed_mb']:.1f} MB\n"
+                      f"**Last Cleanup:** {stats['last_cleanup'].strftime('%H:%M:%S') if stats['last_cleanup'] else 'Never'}",
+                inline=True
+            )
+        
+        # Add music-specific stats
+        music_cog = self.bot.get_cog('Music')
+        if music_cog:
+            active_voices = len([vs for vs in music_cog.voice_states.values() if vs.voice and vs.voice.is_connected()])
+            total_queue_songs = sum(len(vs.songs) for vs in music_cog.voice_states.values())
+            
+            embed.add_field(
+                name="🎵 Music State",
+                value=f"**Active Voices:** {active_voices}\n"
+                      f"**Queued Songs:** {total_queue_songs}\n"
+                      f"**Voice States:** {len(music_cog.voice_states)}",
+                inline=False
+            )
+        
+        embed.set_footer(text="Use ?cleanup to force memory cleanup")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='cleanup')
+    @commands.has_permissions(manage_guild=True)
+    async def force_cleanup(self, ctx):
+        """Force memory cleanup and garbage collection."""
+        async with ctx.typing():
+            before_stats = memory_manager.get_memory_stats()
+            before_memory = before_stats.get('rss_mb', 0)
+            before_objects = before_stats.get('tracked_objects', 0)
+            
+            # Force cleanup
+            freed_mb = await memory_manager.force_garbage_collection()
+            
+            after_stats = memory_manager.get_memory_stats()
+            after_memory = after_stats.get('rss_mb', 0)
+            after_objects = after_stats.get('tracked_objects', 0)
+            
+            cleaned_objects = before_objects - after_objects
+        
+        embed = discord.Embed(
+            title="🧹 Memory Cleanup Complete",
+            description="Forced garbage collection and memory cleanup",
+            color=discord.Color.green()
+        )
+        
+        embed.add_field(
+            name="📊 Memory Change",
+            value=f"**Before:** {before_memory:.1f} MB\n"
+                  f"**After:** {after_memory:.1f} MB\n"
+                  f"**Freed:** {freed_mb:.1f} MB",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🗑️ Objects Cleaned",
+            value=f"**Before:** {before_objects}\n"
+                  f"**After:** {after_objects}\n"
+                  f"**Cleaned:** {cleaned_objects}",
+            inline=True
+        )
+        
+        if freed_mb > 1.0 or cleaned_objects > 0:
+            embed.color = discord.Color.green()
+            embed.add_field(
+                name="✅ Result",
+                value="Cleanup was effective!",
+                inline=False
+            )
+        else:
+            embed.color = discord.Color.blue()
+            embed.add_field(
+                name="ℹ️ Result", 
+                value="System was already clean",
+                inline=False
+            )
         
         await ctx.send(embed=embed)
 

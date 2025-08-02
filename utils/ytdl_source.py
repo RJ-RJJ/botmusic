@@ -1,6 +1,6 @@
 """
 YTDL Source class for Discord Music Bot
-Handles YouTube-dl operations and audio source management
+Handles YouTube-dl operations and audio source management with memory management
 """
 import discord
 from discord.ext import commands
@@ -9,6 +9,7 @@ import asyncio
 import functools
 from config.settings import YDL_OPTIONS, FFMPEG_OPTIONS, FFMPEG_EXECUTABLE
 from utils.exceptions import YTDLError
+from utils.memory_manager import memory_manager
 
 class YTDLSource(discord.PCMVolumeTransformer):
     """Audio source using yt-dlp for extraction"""
@@ -45,6 +46,34 @@ class YTDLSource(discord.PCMVolumeTransformer):
         # Store webpage URL for potential stream refresh
         self.webpage_url = data.get('webpage_url')
         self._ctx = ctx
+        
+        # Track this audio source for memory management
+        memory_manager.track_object(self, 'audio_source')
+    
+    def __del__(self):
+        """Destructor to ensure proper cleanup"""
+        try:
+            self.cleanup()
+        except:
+            pass
+    
+    def cleanup(self):
+        """Manually cleanup audio source resources"""
+        try:
+            # Cleanup audio source
+            if hasattr(self, 'source') and self.source:
+                if hasattr(self.source, 'cleanup'):
+                    self.source.cleanup()
+            
+            # Clear data references
+            if hasattr(self, 'data') and isinstance(self.data, dict):
+                self.data.clear()
+            
+            # Remove from memory tracking
+            memory_manager.untrack_object(self)
+            
+        except Exception as e:
+            print(f"⚠️ Error during YTDLSource cleanup: {e}")
 
     def __str__(self):
         return '**{0.title}** by **{0.uploader}**'.format(self)
@@ -160,6 +189,11 @@ class YTDLSource(discord.PCMVolumeTransformer):
                     new_stream_url = info['entries'][0]['url']
                 else:
                     raise YTDLError("No valid entries found")
+            
+            # Cleanup old audio source before creating new one
+            if hasattr(self, 'source') and self.source:
+                if hasattr(self.source, 'cleanup'):
+                    self.source.cleanup()
             
             # Create new audio source with fresh URL
             new_source = discord.FFmpegPCMAudio(new_stream_url, **FFMPEG_OPTIONS, executable=FFMPEG_EXECUTABLE)
