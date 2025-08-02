@@ -177,11 +177,10 @@ class EnhancedEmbed:
             embed.set_thumbnail(url=thumbnail)
         
         # Duration info
-        if duration > 0:
-            duration_str = f"{duration // 60}:{duration % 60:02d}"
+        if duration and duration != "0s" and duration != "":
             embed.add_field(
                 name="⏱️ Duration",
-                value=duration_str,
+                value=duration,
                 inline=True
             )
         else:
@@ -255,8 +254,8 @@ class EnhancedEmbed:
                 
                 # Duration
                 duration = song.source.duration
-                if duration > 0:
-                    duration_str = f" `[{duration // 60}:{duration % 60:02d}]`"
+                if duration and duration != "0s" and duration != "":
+                    duration_str = f" `[{duration}]`"
                 else:
                     duration_str = " `[LIVE]`"
                 
@@ -525,11 +524,10 @@ class SmartPlaybackFeedback:
                 )
         
         # Duration
-        if duration > 0:
-            duration_str = f"{duration // 60}:{duration % 60:02d}"
+        if duration and duration != "0s" and duration != "":
             embed.add_field(
                 name="⏱️ Duration",
-                value=duration_str,
+                value=duration,
                 inline=True
             )
         else:
