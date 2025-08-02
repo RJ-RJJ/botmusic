@@ -8,6 +8,7 @@ import platform
 from config.settings import PREFIX
 from utils.helpers import get_server_count, get_simple_status_messages
 from utils.memory_manager import memory_manager
+from utils.error_handler import error_handler
 
 class Info(commands.Cog):
     """Information and help commands"""
@@ -60,6 +61,9 @@ class Info(commands.Cog):
     `{PREFIX}debug` - Show bot status and diagnostics
     `{PREFIX}fix` - Restart audio player if stuck
     `{PREFIX}platforms` - Show supported platforms & alternatives
+    `{PREFIX}memory` - Show memory usage (Admin)
+    `{PREFIX}cleanup` - Force memory cleanup (Admin)
+    `{PREFIX}errors` - Show error statistics (Admin)
             """,
             inline=False
         )
@@ -341,6 +345,87 @@ class Info(commands.Cog):
             )
         
         await ctx.send(embed=embed)
+
+    @commands.command(name='errors', aliases=['error_stats', 'errstats'])
+    @commands.has_permissions(manage_guild=True)
+    async def error_statistics(self, ctx):
+        """Shows error statistics and most common errors."""
+        stats = error_handler.get_error_statistics()
+        
+        embed = discord.Embed(
+            title="🚨 Error Statistics",
+            description="Error tracking and analysis:",
+            color=discord.Color.red()
+        )
+        
+        # Total errors
+        embed.add_field(
+            name="📊 Overview",
+            value=f"**Total Errors:** {stats['total_errors']}\n"
+                  f"**Categories:** {len(stats['by_category'])}",
+            inline=True
+        )
+        
+        # Errors by category
+        if stats['by_category']:
+            category_text = ""
+            for category, errors in stats['by_category'].items():
+                total = sum(errors.values())
+                category_name = category.replace('_', ' ').title()
+                category_text += f"• **{category_name}:** {total}\n"
+            
+            embed.add_field(
+                name="📂 By Category",
+                value=category_text[:1024] if category_text else "No errors recorded",
+                inline=True
+            )
+        
+        # Most common errors
+        if stats['most_common']:
+            common_errors = ""
+            for i, error in enumerate(stats['most_common'][:5], 1):
+                category_name = error['category'].replace('_', ' ').title()
+                common_errors += f"{i}. **{error['type']}** ({category_name}): {error['count']}\n"
+            
+            embed.add_field(
+                name="🔥 Most Common",
+                value=common_errors,
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="🎉 Status",
+                value="No errors recorded yet!",
+                inline=False
+            )
+        
+        embed.set_footer(text="Use ?cleanup to clear error logs")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='test_error', aliases=['testerr'])
+    @commands.has_permissions(administrator=True)
+    async def test_error_handling(self, ctx, error_type: str = "user"):
+        """Test the error handling system (Admin only)."""
+        
+        if error_type.lower() == "user":
+            # Simulate user error
+            raise commands.MissingRequiredArgument(commands.Parameter("test_param", commands.Parameter.POSITIONAL_OR_KEYWORD))
+        elif error_type.lower() == "voice":
+            # Simulate voice error
+            from utils.exceptions import VoiceError
+            raise VoiceError("Test voice connection error")
+        elif error_type.lower() == "music":
+            # Simulate music error
+            from utils.exceptions import YTDLError
+            raise YTDLError("Test music loading error")
+        elif error_type.lower() == "permission":
+            # Simulate permission error
+            raise commands.MissingPermissions(["manage_messages"])
+        elif error_type.lower() == "system":
+            # Simulate system error
+            raise RuntimeError("Test system error")
+        else:
+            await ctx.send("Available test types: `user`, `voice`, `music`, `permission`, `system`")
 
 async def setup(bot):
     """Setup function for the cog"""

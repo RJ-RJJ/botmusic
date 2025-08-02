@@ -11,6 +11,7 @@ from utils.voice_state import VoiceState
 from utils.ytdl_source import YTDLSource
 from utils.song import Song
 from utils.exceptions import VoiceError, YTDLError
+from utils.error_handler import error_handler
 from config.settings import PREFIX
 
 class Music(commands.Cog):
@@ -46,8 +47,8 @@ class Music(commands.Cog):
         ctx.voice_state = self.get_voice_state(ctx)
 
     async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError):
-        """Handle cog-specific errors"""
-        await ctx.send('An error occurred: {}'.format(str(error)))
+        """Handle cog-specific errors using centralized error handler"""
+        await error_handler.handle_error(error, ctx, "Music Cog Error")
 
     @commands.command(name='join', invoke_without_subcommand=True)
     async def _join(self, ctx: commands.Context):
@@ -556,14 +557,14 @@ class Music(commands.Cog):
             # Single song handling (original behavior)
             try:
                 source = await YTDLSource.create_source(ctx, search, loop=self.bot.loop)
-            except YTDLError as e:
-                await ctx.send('An error occurred while processing this request: {}'.format(str(e)))
-            else:
                 song = Song(source)
                 await ctx.voice_state.songs.put(song)
                 await ctx.send('🎵 Enqueued {}'.format(str(source)))
                 
                 # Note: Audio player task is already running and will start playback automatically
+            except (YTDLError, Exception) as e:
+                # Use centralized error handler for better user experience
+                await error_handler.handle_error(e, ctx, f"Failed to process: {search}")
     
     async def _handle_playlist(self, ctx: commands.Context, playlist_data):
         """Handle playlist loading with smart concurrent batching"""

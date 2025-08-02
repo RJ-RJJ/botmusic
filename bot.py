@@ -18,6 +18,7 @@ from utils import (
     on_voice_state_update_handler
 )
 from utils.memory_manager import memory_manager
+from utils.error_handler import error_handler
 
 # Import cogs
 from cogs import Music, Info
@@ -66,21 +67,9 @@ class MusicBot(commands.Bot):
         print(f'🧠 Memory manager started with 5-minute cleanup cycle')
     
     async def on_command_error(self, ctx, error):
-        """Global error handler"""
-        if isinstance(error, commands.NoPrivateMessage):
-            await ctx.author.send('This command cannot be used in private messages.')
-        elif isinstance(error, commands.DisabledCommand):
-            await ctx.author.send('Sorry. This command is disabled and cannot be used.')
-        elif isinstance(error, commands.CommandInvokeError):
-            print(f'In {ctx.command.qualified_name}:')
-            print(f'{error.original.__class__.__name__}: {error.original}')
-        elif isinstance(error, commands.MissingPermissions):
-            await ctx.send(f"❌ You don't have permission to use this command.")
-        elif isinstance(error, commands.BotMissingPermissions):
-            await ctx.send(f"❌ I don't have the required permissions to do that.")
-        else:
-            # Log unexpected errors
-            print(f"Unexpected error in {ctx.command}: {error}")
+        """Global error handler using centralized error handling system"""
+        # Use centralized error handler
+        await error_handler.handle_error(error, ctx)
     
     async def on_voice_state_update(self, member, before, after):
         """Handle voice state updates for auto-disconnect"""
