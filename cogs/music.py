@@ -702,26 +702,26 @@ class Music(commands.Cog):
         
         # DRM-protected music services
         if 'open.spotify.com' in url_lower or 'spotify.com' in url_lower:
-            return True, "🚫 **Spotify tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`\n• Contoh: `?play bad habits ed sheeran`"
+            return True, "🚫 **Spotify is not supported** due to DRM protection.\n\n✅ **Alternatives:**\n• Copy song name: `?play [song name] [artist]`\n• Use YouTube Music: `?play [song name / playlist link]`\n• Example: `?play bad habits ed sheeran`"
             
         elif 'music.apple.com' in url_lower or 'itunes.apple.com' in url_lower:
-            return True, "🚫 **Apple Music tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`"
+            return True, "🚫 **Apple Music is not supported** due to DRM protection.\n\n✅ **Alternatives:**\n• Copy song name: `?play [song name] [artist]`\n• Use YouTube Music: `?play [song name / playlist link]`"
             
         elif 'tidal.com' in url_lower:
-            return True, "🚫 **Tidal tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`"
+            return True, "🚫 **Tidal is not supported** due to DRM protection.\n\n✅ **Alternatives:**\n• Copy song name: `?play [song name] [artist]`\n• Use YouTube Music: `?play [song name / playlist link]`"
             
         elif 'deezer.com' in url_lower:
-            return True, "🚫 **Deezer tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`"
+            return True, "🚫 **Deezer is not supported** due to DRM protection.\n\n✅ **Alternatives:**\n• Copy song name: `?play [song name] [artist]`\n• Use YouTube Music: `?play [song name / playlist link]`"
             
         elif 'music.amazon.com' in url_lower or 'amazon.com/music' in url_lower:
-            return True, "🚫 **Amazon Music tidak didukung** karena menggunakan DRM protection.\n\n✅ **Alternatif:**\n• Copy nama lagu: `?play [nama lagu] [artis]`\n• Gunakan YouTube Music: `?play [nama lagu / link playlist]`"
+            return True, "🚫 **Amazon Music is not supported** due to DRM protection.\n\n✅ **Alternatives:**\n• Copy song name: `?play [song name] [artist]`\n• Use YouTube Music: `?play [song name / playlist link]`"
             
         # Other potentially problematic services
         elif 'netflix.com' in url_lower:
-            return True, "🚫 **Netflix tidak didukung** - ini adalah layanan video streaming.\n\n✅ **Bot ini untuk musik/audio:**\n• YouTube: `?play [lagu/video]`\n• SoundCloud: `?play [soundcloud link]`"
+            return True, "🚫 **Netflix is not supported** - this is a video streaming service.\n\n✅ **This bot is for music/audio:**\n• YouTube: `?play [song/video]`\n• SoundCloud: `?play [soundcloud link]`"
             
         elif 'hulu.com' in url_lower or 'disney' in url_lower:
-            return True, "🚫 **Video streaming services tidak didukung**.\n\n✅ **Bot ini untuk musik/audio:**\n• YouTube: `?play [lagu/video]`\n• SoundCloud: `?play [soundcloud link]`"
+            return True, "🚫 **Video streaming services are not supported**.\n\n✅ **This bot is for music/audio:**\n• YouTube: `?play [song/video]`\n• SoundCloud: `?play [soundcloud link]`"
             
         return False, ""
 

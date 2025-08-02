@@ -173,15 +173,15 @@ class Info(commands.Cog):
         """Shows detailed information about supported platforms."""
         embed = discord.Embed(
             title="🌐 Supported Audio Platforms",
-            description="Berikut platform yang didukung dan tidak didukung oleh bot:",
+            description="Here are the platforms supported and not supported by the bot:",
             color=discord.Color.green()
         )
         
         embed.add_field(
-            name="✅ **DIDUKUNG (Gratis)**",
+            name="✅ **SUPPORTED (Free)**",
             value="""
     **🎵 Music Platforms:**
-    • **YouTube** - Semua video/musik
+    • **YouTube** - All videos/music
     • **YouTube Music** - Playlist & single songs
     • **SoundCloud** - Public tracks
     • **Bandcamp** - Free tracks
@@ -189,7 +189,7 @@ class Info(commands.Cog):
 
     **📱 Social Media:**
     • **TikTok** - Public videos
-    • **Twitter/X** - Video dengan audio
+    • **Twitter/X** - Videos with audio
     • **Facebook** - Public videos
 
     **📻 Other:**
@@ -200,7 +200,7 @@ class Info(commands.Cog):
         )
         
         embed.add_field(
-            name="❌ **TIDAK DIDUKUNG**",
+            name="❌ **NOT SUPPORTED**",
             value="""
     **🔒 DRM-Protected Services:**
     • **Spotify** - Premium & DRM
@@ -215,26 +215,26 @@ class Info(commands.Cog):
     • **Disney+** - DRM protected
     • **Hulu** - DRM protected
 
-    **💡 Alasan:** DRM encryption mencegah ekstraksi audio
+    **💡 Reason:** DRM encryption prevents audio extraction
             """,
             inline=True
         )
         
         embed.add_field(
-            name="🔄 **Cara Menggunakan Platform Tidak Didukung**",
+            name="🔄 **How to Use Unsupported Platforms**",
             value=f"""
-    **Step 1:** Copy nama lagu dari platform yang tidak didukung
-    **Step 2:** Search di YouTube dengan bot:
+    **Step 1:** Copy song name from unsupported platform
+    **Step 2:** Search on YouTube with bot:
 
-    **Contoh:**
+    **Example:**
     ```
     Spotify: "Bad Habits - Ed Sheeran"
     Bot: {PREFIX}play bad habits ed sheeran
     ```
 
-    **Untuk Playlist:**
-    1. Buat playlist di YouTube Music
-    2. Copy playlist URL ke bot
+    **For Playlists:**
+    1. Create playlist on YouTube Music
+    2. Copy playlist URL to bot
     3. `{PREFIX}play https://music.youtube.com/playlist?list=...`
             """,
             inline=False
