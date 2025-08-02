@@ -17,6 +17,7 @@ from .helpers import (
 )
 from .memory_manager import memory_manager
 from .error_handler import error_handler
+from .cache_manager import cache_manager
 
 __all__ = [
     'VoiceError',
@@ -31,5 +32,6 @@ __all__ = [
     'update_bot_status',
     'on_voice_state_update_handler',
     'memory_manager',
-    'error_handler'
+    'error_handler',
+    'cache_manager'
 ]

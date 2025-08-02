@@ -9,6 +9,7 @@ from config.settings import PREFIX
 from utils.helpers import get_server_count, get_simple_status_messages
 from utils.memory_manager import memory_manager
 from utils.error_handler import error_handler
+from utils.cache_manager import cache_manager
 
 class Info(commands.Cog):
     """Information and help commands"""
@@ -64,6 +65,8 @@ class Info(commands.Cog):
     `{PREFIX}memory` - Show memory usage (Admin)
     `{PREFIX}cleanup` - Force memory cleanup (Admin)
     `{PREFIX}errors` - Show error statistics (Admin)
+    `{PREFIX}cache` - Show cache statistics (Admin)
+    `{PREFIX}cache_clear` - Clear all caches (Admin)
             """,
             inline=False
         )
@@ -426,6 +429,175 @@ class Info(commands.Cog):
             raise RuntimeError("Test system error")
         else:
             await ctx.send("Available test types: `user`, `voice`, `music`, `permission`, `system`")
+
+    @commands.command(name='cache', aliases=['cache_stats', 'cacheinfo'])
+    @commands.has_permissions(manage_guild=True)
+    async def cache_statistics(self, ctx):
+        """Shows cache statistics and performance metrics."""
+        stats = cache_manager.get_comprehensive_stats()
+        efficiency = cache_manager.get_cache_efficiency_report()
+        
+        embed = discord.Embed(
+            title="⚡ Cache Statistics",
+            description="Cache performance and efficiency metrics:",
+            color=discord.Color.gold()
+        )
+        
+        # Overview
+        embed.add_field(
+            name="📊 Overview",
+            value=f"**Total Entries:** {stats['total_entries']}\n"
+                  f"**Uptime:** {stats['uptime_formatted']}\n"
+                  f"**Overall Hit Rate:** {efficiency['overall_hit_rate']}%",
+            inline=True
+        )
+        
+        # Cache Performance
+        embed.add_field(
+            name="🚀 Performance",
+            value=f"**Speed Improvement:** {efficiency['performance_improvement']}\n"
+                  f"**API Calls Saved:** {efficiency['api_calls_saved']}\n"
+                  f"**Memory Saved:** {efficiency['memory_saved_estimate']}",
+            inline=True
+        )
+        
+        # Individual Cache Stats
+        cache_details = ""
+        caches = [
+            ("🎵 Metadata", stats['metadata_cache']),
+            ("🔗 Stream URLs", stats['stream_cache']),
+            ("📀 Playlists", stats['playlist_cache']),
+            ("🔍 Search", stats['search_cache'])
+        ]
+        
+        for cache_name, cache_stats in caches:
+            hit_rate = cache_stats['hit_rate']
+            size = cache_stats['size']
+            max_size = cache_stats['max_size']
+            cache_details += f"{cache_name}: {size}/{max_size} ({hit_rate}% hit)\n"
+        
+        embed.add_field(
+            name="💾 Cache Details",
+            value=cache_details,
+            inline=False
+        )
+        
+        # Top cached items
+        if efficiency['top_cached_items']:
+            top_items = ""
+            for i, item in enumerate(efficiency['top_cached_items'][:5], 1):
+                cache_type = item['type'].replace('_', ' ').title()
+                top_items += f"{i}. {cache_type} (×{item['access_count']})\n"
+            
+            embed.add_field(
+                name="🔥 Most Accessed",
+                value=top_items,
+                inline=True
+            )
+        
+        embed.set_footer(text=f"Cache Dir Size: {stats['cache_dir_size'] // 1024}KB • Use ?cache_clear to reset")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='cache_clear', aliases=['clearcache', 'resetcache'])
+    @commands.has_permissions(administrator=True)
+    async def clear_cache(self, ctx):
+        """Clear all cache data (Admin only)."""
+        
+        # Get stats before clearing
+        before_stats = cache_manager.get_comprehensive_stats()
+        before_entries = before_stats['total_entries']
+        
+        # Clear all caches
+        cache_manager.metadata_cache.clear()
+        cache_manager.stream_cache.clear()
+        cache_manager.playlist_cache.clear()
+        cache_manager.search_cache.clear()
+        
+        embed = discord.Embed(
+            title="🧹 Cache Cleared",
+            description="All cache data has been cleared",
+            color=discord.Color.orange()
+        )
+        
+        embed.add_field(
+            name="📊 Cleared Data",
+            value=f"**Total Entries:** {before_entries}\n"
+                  f"**Cache Types:** 4 (metadata, stream, playlist, search)\n"
+                  f"**Disk Space:** Freed on next cleanup",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="⚠️ Impact",
+            value="**Next requests will be slower**\n"
+                  "**Cache will rebuild automatically**\n"
+                  "**Performance will improve over time**",
+            inline=True
+        )
+        
+        embed.set_footer(text="Cache performance will rebuild as songs are played")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='cache_warm', aliases=['warmcache'])
+    @commands.has_permissions(administrator=True)
+    async def warm_cache(self, ctx, *, songs: str = ""):
+        """Pre-warm cache with popular songs (Admin only)."""
+        
+        if not songs:
+            # Default popular songs for warming
+            popular_songs = [
+                "never gonna give you up",
+                "bohemian rhapsody queen",
+                "shape of you ed sheeran",
+                "despacito luis fonsi",
+                "bad habits ed sheeran",
+                "blinding lights the weeknd",
+                "stay the kid laroi",
+                "heat waves glass animals"
+            ]
+        else:
+            # User provided songs
+            popular_songs = [song.strip() for song in songs.split(',')]
+        
+        embed = discord.Embed(
+            title="🔥 Cache Warming",
+            description=f"Pre-loading {len(popular_songs)} popular songs...",
+            color=discord.Color.orange()
+        )
+        
+        embed.add_field(
+            name="🎵 Songs to Cache",
+            value="\n".join(f"• {song}" for song in popular_songs[:10]),
+            inline=False
+        )
+        
+        if len(popular_songs) > 10:
+            embed.add_field(
+                name="➕ Additional",
+                value=f"... and {len(popular_songs) - 10} more songs",
+                inline=False
+            )
+        
+        embed.set_footer(text="This may take a few minutes...")
+        
+        msg = await ctx.send(embed=embed)
+        
+        # Start cache warming in background
+        try:
+            await cache_manager.warm_cache_for_popular_songs(popular_songs)
+            
+            # Update embed with results
+            embed.title = "✅ Cache Warming Complete"
+            embed.description = f"Successfully pre-loaded {len(popular_songs)} songs"
+            embed.color = discord.Color.green()
+            
+            await msg.edit(embed=embed)
+            
+        except Exception as e:
+            embed.title = "❌ Cache Warming Failed"
+            embed.description = f"Error during cache warming: {str(e)}"
+            embed.color = discord.Color.red()
+            await msg.edit(embed=embed)
 
 async def setup(bot):
     """Setup function for the cog"""

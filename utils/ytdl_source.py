@@ -10,6 +10,7 @@ import functools
 from config.settings import YDL_OPTIONS, FFMPEG_OPTIONS, FFMPEG_EXECUTABLE
 from utils.exceptions import YTDLError
 from utils.memory_manager import memory_manager
+from utils.cache_manager import cache_manager
 
 class YTDLSource(discord.PCMVolumeTransformer):
     """Audio source using yt-dlp for extraction"""
@@ -80,9 +81,45 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
     @classmethod
     async def create_source(cls, ctx: commands.Context, search: str, *, loop: asyncio.BaseEventLoop = None):
-        """Create audio source with full processing"""
+        """Create audio source with full processing and caching"""
         loop = loop or asyncio.get_event_loop()
 
+        print(f"🔍 Creating source for: {search}")
+        
+        # Check cache first for metadata
+        cached_metadata = await cache_manager.get_song_metadata(search)
+        if cached_metadata:
+            print(f"⚡ Using cached metadata for: {search}")
+            
+            # Check if we also have cached stream URL
+            webpage_url = cached_metadata.get('webpage_url')
+            cached_stream = await cache_manager.get_stream_url(webpage_url) if webpage_url else None
+            
+            if cached_stream:
+                print(f"⚡ Using cached stream URL for: {search}")
+                # Create source with cached data
+                cached_metadata['url'] = cached_stream
+                return cls(ctx, discord.FFmpegPCMAudio(cached_stream, **FFMPEG_OPTIONS, executable=FFMPEG_EXECUTABLE), data=cached_metadata)
+            else:
+                # We have metadata but need fresh stream URL
+                print(f"🔄 Refreshing stream URL for cached metadata: {search}")
+                try:
+                    partial = functools.partial(cls.YTDL.extract_info, webpage_url, download=False)
+                    fresh_info = await loop.run_in_executor(None, partial)
+                    
+                    if fresh_info and 'url' in fresh_info:
+                        # Cache the new stream URL
+                        await cache_manager.cache_stream_url(webpage_url, fresh_info['url'])
+                        
+                        # Merge cached metadata with fresh stream URL
+                        cached_metadata['url'] = fresh_info['url']
+                        return cls(ctx, discord.FFmpegPCMAudio(fresh_info['url'], **FFMPEG_OPTIONS, executable=FFMPEG_EXECUTABLE), data=cached_metadata)
+                except Exception as e:
+                    print(f"⚠️ Failed to refresh stream URL, falling back to full extraction: {e}")
+
+        # No cache hit, perform full extraction
+        print(f"🌐 Full extraction for: {search}")
+        
         partial = functools.partial(cls.YTDL.extract_info, search, download=False, process=False)
         data = await loop.run_in_executor(None, partial)
 
@@ -128,14 +165,31 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 except IndexError:
                     raise YTDLError('Couldn\'t retrieve any matches for `{}`'.format(webpage_url))
 
+        # Cache the extracted data
+        try:
+            await cache_manager.cache_song_metadata(search, info)
+            if 'url' in info:
+                await cache_manager.cache_stream_url(webpage_url, info['url'])
+            print(f"💾 Cached metadata and stream URL for: {search}")
+        except Exception as e:
+            print(f"⚠️ Failed to cache data: {e}")
+
         return cls(ctx, discord.FFmpegPCMAudio(info['url'], **FFMPEG_OPTIONS, executable=FFMPEG_EXECUTABLE), data=info)
         
     @classmethod
     async def create_source_lazy(cls, ctx: commands.Context, search: str, *, loop: asyncio.BaseEventLoop = None):
-        """Create source with metadata only, without extracting stream URL (for playlist loading)"""
+        """Create source with metadata only, without extracting stream URL (for playlist loading) with caching"""
         loop = loop or asyncio.get_event_loop()
 
-        # Extract metadata only (no stream URL processing)
+        # Check cache first for metadata (much faster for playlist loading)
+        cached_metadata = await cache_manager.get_song_metadata(search)
+        if cached_metadata:
+            print(f"⚡ Using cached metadata for lazy load: {search}")
+            cached_metadata['_lazy_loaded'] = True
+            return cls(ctx, None, data=cached_metadata)
+
+        # No cache hit, extract metadata only (no stream URL processing)
+        print(f"🌐 Lazy extraction for: {search}")
         partial = functools.partial(cls.YTDL.extract_info, search, download=False, process=False)
         data = await loop.run_in_executor(None, partial)
 
@@ -157,18 +211,21 @@ class YTDLSource(discord.PCMVolumeTransformer):
         # Store the webpage URL for later stream extraction
         webpage_url = info.get('webpage_url', search)
         
-        # Create a placeholder audio source (will be replaced when actually played)
-        # Use a minimal dummy source that won't actually play
-        placeholder_source = None
-        
         # Store the URL for later stream extraction
         info['webpage_url'] = webpage_url
         info['_lazy_loaded'] = True
         
-        return cls(ctx, placeholder_source, data=info)
+        # Cache the metadata for future use
+        try:
+            await cache_manager.cache_song_metadata(search, info)
+            print(f"💾 Cached lazy metadata for: {search}")
+        except Exception as e:
+            print(f"⚠️ Failed to cache lazy metadata: {e}")
+        
+        return cls(ctx, None, data=info)
         
     async def refresh_stream_url(self):
-        """Refresh the stream URL if it has expired, or create it for lazy-loaded sources"""
+        """Refresh the stream URL if it has expired, or create it for lazy-loaded sources with caching"""
         webpage_url = self.webpage_url or self.url
         if not webpage_url:
             raise YTDLError("No webpage URL available for stream refresh")
@@ -178,17 +235,29 @@ class YTDLSource(discord.PCMVolumeTransformer):
             action = "Creating" if is_lazy else "Refreshing"
             print(f"🔄 {action} stream URL for: {self.title}")
             
-            loop = self._ctx.bot.loop
-            partial = functools.partial(self.YTDL.extract_info, webpage_url, download=False)
-            info = await loop.run_in_executor(None, partial)
-            
-            if 'entries' not in info:
-                new_stream_url = info['url']
+            # Check cache first for stream URL
+            cached_stream = await cache_manager.get_stream_url(webpage_url)
+            if cached_stream:
+                print(f"⚡ Using cached stream URL for: {self.title}")
+                new_stream_url = cached_stream
             else:
-                if info['entries'] and info['entries'][0]:
-                    new_stream_url = info['entries'][0]['url']
+                # No cache hit, extract fresh stream URL
+                print(f"🌐 Extracting fresh stream URL for: {self.title}")
+                loop = self._ctx.bot.loop
+                partial = functools.partial(self.YTDL.extract_info, webpage_url, download=False)
+                info = await loop.run_in_executor(None, partial)
+                
+                if 'entries' not in info:
+                    new_stream_url = info['url']
                 else:
-                    raise YTDLError("No valid entries found")
+                    if info['entries'] and info['entries'][0]:
+                        new_stream_url = info['entries'][0]['url']
+                    else:
+                        raise YTDLError("No valid entries found")
+                
+                # Cache the new stream URL
+                await cache_manager.cache_stream_url(webpage_url, new_stream_url)
+                print(f"💾 Cached fresh stream URL for: {self.title}")
             
             # Cleanup old audio source before creating new one
             if hasattr(self, 'source') and self.source:
@@ -221,8 +290,18 @@ class YTDLSource(discord.PCMVolumeTransformer):
     
     @classmethod
     async def extract_playlist_info(cls, url: str, *, loop: asyncio.BaseEventLoop = None):
-        """Extract playlist information without downloading"""
+        """Extract playlist information without downloading with caching"""
         loop = loop or asyncio.get_event_loop()
+        
+        print(f"🎵 Extracting playlist info for: {url}")
+        
+        # Check cache first for playlist data
+        cached_playlist = await cache_manager.get_playlist_data(url)
+        if cached_playlist:
+            print(f"⚡ Using cached playlist data for: {url}")
+            return cached_playlist
+        
+        print(f"🌐 Full playlist extraction for: {url}")
         
         # Create YTDL instance with playlist enabled - don't use extract_flat for URLs
         ytdl_playlist = yt_dlp.YoutubeDL({
@@ -267,6 +346,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
             raise YTDLError('No valid entries found in playlist')
             
         data['entries'] = valid_entries
+        
+        # Cache the playlist data
+        try:
+            await cache_manager.cache_playlist_data(url, data)
+            print(f"💾 Cached playlist data ({len(valid_entries)} songs) for: {url}")
+        except Exception as e:
+            print(f"⚠️ Failed to cache playlist data: {e}")
+        
         return data
     
     @classmethod

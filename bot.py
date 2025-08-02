@@ -19,6 +19,7 @@ from utils import (
 )
 from utils.memory_manager import memory_manager
 from utils.error_handler import error_handler
+from utils.cache_manager import cache_manager
 
 # Import cogs
 from cogs import Music, Info
@@ -65,6 +66,11 @@ class MusicBot(commands.Bot):
         # Start memory manager periodic cleanup (every 5 minutes)
         memory_manager.start_periodic_cleanup(self.loop, interval=300)
         print(f'🧠 Memory manager started with 5-minute cleanup cycle')
+        
+        # Initialize cache system
+        await cache_manager.load_cache_from_disk()
+        await cache_manager.start_background_cleanup(interval=600)  # 10 minutes
+        print(f'⚡ Cache system initialized with background cleanup')
     
     async def on_command_error(self, ctx, error):
         """Global error handler using centralized error handling system"""
