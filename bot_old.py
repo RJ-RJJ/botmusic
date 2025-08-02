@@ -851,8 +851,28 @@ class VoiceState:
         self.current_playlist = playlist_data
         self.playlist_position = 0
     
-    def clear_playlist(self):
-        """Clear the current playlist"""
+    async def clear_playlist(self):
+        """Clear the current playlist and remove from cache"""
+        # If we have a current playlist, delete it from cache
+        if self.current_playlist and 'webpage_url' in self.current_playlist:
+            try:
+                # Import cache_manager if not already imported
+                from utils.cache_manager import cache_manager
+                
+                # Get the playlist URL
+                playlist_url = self.current_playlist.get('webpage_url')
+                if playlist_url:
+                    # Generate the cache key
+                    normalized_url = cache_manager._normalize_url(playlist_url)
+                    key = cache_manager._generate_key("playlist", normalized_url)
+                    
+                    # Delete from playlist cache
+                    cache_manager.playlist_cache.delete(key)
+                    print(f"🧹 Removed playlist from cache: {playlist_url}")
+            except Exception as e:
+                print(f"⚠️ Error removing playlist from cache: {e}")
+        
+        # Clear playlist data
         self.current_playlist = None
         self.playlist_position = 0
 
@@ -1007,7 +1027,7 @@ class Music(commands.Cog):
         """Stops playing song and clears the queue."""
 
         ctx.voice_state.songs.clear()
-        ctx.voice_state.clear_playlist()  # Clear current playlist
+        await ctx.voice_state.clear_playlist()  # Clear current playlist and remove from cache
 
         if ctx.voice_state.is_playing:
             ctx.voice_state.voice.stop()

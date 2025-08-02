@@ -194,11 +194,12 @@ class Music(commands.Cog):
         """Stops playing song and clears the queue."""
 
         ctx.voice_state.songs.clear()
-        ctx.voice_state.clear_playlist()  # Clear current playlist
+        await ctx.voice_state.clear_playlist()  # Clear current playlist and remove from cache
 
         if ctx.voice_state.is_playing:
             ctx.voice_state.voice.stop()
-            await ctx.message.add_reaction('⏹️')
+            
+        await ctx.message.add_reaction('⏹️')
 
     @commands.command(name='skip')
     async def _skip(self, ctx: commands.Context):
