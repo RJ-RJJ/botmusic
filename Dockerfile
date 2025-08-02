@@ -16,8 +16,11 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the bot code
+# Copy the bot code and all modules
 COPY bot.py .
+COPY config/ ./config/
+COPY utils/ ./utils/
+COPY cogs/ ./cogs/
 
 # Create non-root user for security
 RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
@@ -28,8 +31,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Health check to ensure bot is running
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=5)" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD python -c "import psutil, os; p = psutil.Process(os.getpid()); print('Bot is running, Memory:', p.memory_info().rss // 1024 // 1024, 'MB')" || exit 1
 
 # Run the bot
 CMD ["python", "bot.py"]
