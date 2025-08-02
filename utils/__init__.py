@@ -19,6 +19,7 @@ from .memory_manager import memory_manager
 from .error_handler import error_handler
 from .cache_manager import cache_manager
 from .database_manager import database_manager
+from .logging_manager import logging_manager
 
 __all__ = [
     'VoiceError',
@@ -35,5 +36,6 @@ __all__ = [
     'memory_manager',
     'error_handler',
     'cache_manager',
-    'database_manager'
+    'database_manager',
+    'logging_manager'
 ]

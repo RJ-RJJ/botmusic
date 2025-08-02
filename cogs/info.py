@@ -11,6 +11,7 @@ from utils.memory_manager import memory_manager
 from utils.error_handler import error_handler
 from utils.cache_manager import cache_manager
 from utils.database_manager import database_manager
+from utils.logging_manager import logging_manager
 
 class Info(commands.Cog):
     """Information and help commands"""
@@ -71,6 +72,8 @@ class Info(commands.Cog):
     `{PREFIX}database` - Show database statistics (Admin)
     `{PREFIX}popular` - Show most popular songs
     `{PREFIX}user_stats` - Show your music statistics
+    `{PREFIX}monitoring` - Show system monitoring & health (Admin)
+    `{PREFIX}logs` - Show log files information (Admin)
             """,
             inline=False
         )
@@ -824,6 +827,220 @@ class Info(commands.Cog):
             embed.description = f"Error during backup: {str(e)}"
             embed.color = discord.Color.red()
             await msg.edit(embed=embed)
+
+    @commands.command(name='monitoring', aliases=['monitor', 'health'])
+    @commands.has_permissions(manage_guild=True)
+    async def monitoring_status(self, ctx):
+        """Show comprehensive system monitoring and health status."""
+        monitoring_data = logging_manager.get_monitoring_summary()
+        
+        embed = discord.Embed(
+            title="📊 System Monitoring & Health",
+            color=discord.Color.green() if monitoring_data['health_status']['status'] == 'healthy' else discord.Color.red()
+        )
+        
+        # Health Status
+        health = monitoring_data['health_status']
+        health_icon = "✅" if health['status'] == 'healthy' else "❌"
+        embed.add_field(
+            name=f"{health_icon} Health Status",
+            value=f"**Status:** {health['status'].title()}\n"
+                  f"**Last Check:** {health['last_check_formatted']}\n"
+                  f"**Uptime:** {monitoring_data['performance_summary']['uptime_formatted']}",
+            inline=True
+        )
+        
+        # Current System Metrics
+        metrics = monitoring_data['current_metrics']
+        embed.add_field(
+            name="🖥️ System Metrics",
+            value=f"**Memory:** {metrics['memory_percent']:.1f}% ({metrics['memory_used_mb']} MB)\n"
+                  f"**CPU:** {metrics['cpu_percent']:.1f}%\n"
+                  f"**Errors/min:** {metrics['errors_per_minute']}\n"
+                  f"**Avg Response:** {metrics['avg_response_time']:.2f}s",
+            inline=True
+        )
+        
+        # Performance Summary
+        perf = monitoring_data['performance_summary']
+        embed.add_field(
+            name="⚡ Performance",
+            value=f"**Commands Executed:** {perf['commands_executed']}\n"
+                  f"**API Calls:** {perf['api_calls_made']}\n"
+                  f"**Avg Command Time:** {perf['avg_command_time']:.3f}s\n"
+                  f"**Commands/Hour:** {perf['recent_commands_per_hour']}",
+            inline=True
+        )
+        
+        # Alert Information
+        total_alerts = monitoring_data['total_alerts']
+        recent_alerts = health.get('recent_alerts', [])
+        
+        if recent_alerts:
+            alert_text = "\n".join([f"• {alert['alert']}" for alert in recent_alerts[-3:]])
+            embed.add_field(
+                name=f"🚨 Recent Alerts ({total_alerts} total)",
+                value=alert_text,
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="🚨 Alerts",
+                value=f"No recent alerts ({total_alerts} total)",
+                inline=False
+            )
+        
+        # Alert Thresholds
+        thresholds = monitoring_data['alert_thresholds']
+        threshold_text = f"Memory: {thresholds['memory_usage_percent']}% • "
+        threshold_text += f"CPU: {thresholds['cpu_usage_percent']}% • "
+        threshold_text += f"Errors: {thresholds['error_rate_per_minute']}/min • "
+        threshold_text += f"Response: {thresholds['response_time_seconds']}s"
+        
+        embed.set_footer(text=f"Alert Thresholds: {threshold_text}")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='logs', aliases=['log_files', 'loginfo'])
+    @commands.has_permissions(manage_guild=True)
+    async def log_files_info(self, ctx):
+        """Show information about log files."""
+        log_files = logging_manager.get_log_files_info()
+        
+        if not log_files:
+            return await ctx.send("📄 **No log files found.**")
+        
+        embed = discord.Embed(
+            title="📄 Log Files Information",
+            description="Available log files and their details:",
+            color=discord.Color.blue()
+        )
+        
+        # Split into multiple fields if too many files
+        files_per_field = 8
+        for i in range(0, len(log_files), files_per_field):
+            chunk = log_files[i:i + files_per_field]
+            
+            file_list = ""
+            for log_file in chunk:
+                lines_info = f" ({log_file['lines']} lines)" if log_file['lines'] != 'N/A' else ""
+                file_list += f"**{log_file['name']}**\n"
+                file_list += f"  📊 {log_file['size_mb']} MB{lines_info}\n"
+                file_list += f"  📅 {log_file['modified']}\n\n"
+            
+            field_name = "📁 Log Files" if i == 0 else f"📁 Log Files (cont.)"
+            embed.add_field(
+                name=field_name,
+                value=file_list,
+                inline=len(log_files) <= files_per_field
+            )
+        
+        # Total size
+        total_size = sum(f['size_mb'] for f in log_files)
+        embed.set_footer(text=f"Total: {len(log_files)} files, {total_size:.2f} MB • Use ?export_logs to download")
+        
+        await ctx.send(embed=embed)
+
+    @commands.command(name='export_logs', aliases=['download_logs'])
+    @commands.has_permissions(administrator=True)
+    async def export_logs(self, ctx, log_type: str = "all", hours: int = 24):
+        """Export logs for download (Admin only)."""
+        
+        if hours > 168:  # 1 week max
+            return await ctx.send("❌ **Maximum export period is 168 hours (1 week).**")
+        
+        embed = discord.Embed(
+            title="📦 Exporting Logs",
+            description=f"Exporting {log_type} logs from the last {hours} hours...",
+            color=discord.Color.orange()
+        )
+        
+        msg = await ctx.send(embed=embed)
+        
+        try:
+            export_file = logging_manager.export_logs(log_type, hours)
+            
+            if export_file:
+                embed.title = "✅ Logs Export Complete"
+                embed.description = f"Logs exported successfully"
+                embed.color = discord.Color.green()
+                
+                embed.add_field(
+                    name="📊 Export Details",
+                    value=f"**Type:** {log_type}\n"
+                          f"**Period:** {hours} hours\n"
+                          f"**File:** {export_file.split('/')[-1]}\n"
+                          f"**Location:** logs/",
+                    inline=False
+                )
+                
+                embed.set_footer(text="Export file created in logs directory")
+            else:
+                embed.title = "❌ Logs Export Failed"
+                embed.description = "There was an error during log export"
+                embed.color = discord.Color.red()
+            
+            await msg.edit(embed=embed)
+            
+        except Exception as e:
+            embed.title = "❌ Logs Export Error"
+            embed.description = f"Error during export: {str(e)}"
+            embed.color = discord.Color.red()
+            await msg.edit(embed=embed)
+
+    @commands.command(name='performance', aliases=['perf', 'performance_stats'])
+    @commands.has_permissions(manage_guild=True)
+    async def performance_statistics(self, ctx):
+        """Show detailed performance statistics."""
+        perf_data = logging_manager.performance.get_performance_summary()
+        
+        embed = discord.Embed(
+            title="⚡ Performance Statistics",
+            description="Detailed bot performance metrics:",
+            color=discord.Color.gold()
+        )
+        
+        # Uptime and Basic Stats
+        embed.add_field(
+            name="⏰ Uptime & Activity",
+            value=f"**Uptime:** {perf_data['uptime_formatted']}\n"
+                  f"**Commands Executed:** {perf_data['commands_executed']}\n"
+                  f"**API Calls Made:** {perf_data['api_calls_made']}\n"
+                  f"**Commands/Hour:** {perf_data['recent_commands_per_hour']}",
+            inline=True
+        )
+        
+        # Performance Metrics
+        embed.add_field(
+            name="📊 Response Times",
+            value=f"**Avg Command Time:** {perf_data['avg_command_time']:.3f}s\n"
+                  f"**Avg API Time:** {perf_data['avg_api_time']:.3f}s\n"
+                  f"**APIs/Hour:** {perf_data['recent_apis_per_hour']}\n"
+                  f"**Total Uptime:** {perf_data['uptime_seconds']:.0f}s",
+            inline=True
+        )
+        
+        # Connection Statistics
+        conn_stats = perf_data['connection_stats']
+        embed.add_field(
+            name="🔗 Connection Stats",
+            value=f"**Total Connections:** {conn_stats['total_connections']}\n"
+                  f"**Active Connections:** {conn_stats['active_connections']}\n"
+                  f"**Failed Connections:** {conn_stats['failed_connections']}\n"
+                  f"**Reconnections:** {conn_stats['reconnections']}",
+            inline=True
+        )
+        
+        # Performance Thresholds
+        embed.add_field(
+            name="⚠️ Alert Thresholds",
+            value=f"**Slow Command:** >{logging_manager.performance.slow_command_threshold}s\n"
+                  f"**Slow API Call:** >{logging_manager.performance.slow_api_threshold}s\n"
+                  f"**These trigger warnings in logs**",
+            inline=False
+        )
+        
+        embed.set_footer(text="Performance data collected since bot startup")
+        await ctx.send(embed=embed)
 
 async def setup(bot):
     """Setup function for the cog"""

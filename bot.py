@@ -22,6 +22,7 @@ from utils.memory_manager import memory_manager
 from utils.error_handler import error_handler
 from utils.cache_manager import cache_manager
 from utils.database_manager import database_manager
+from utils.logging_manager import logging_manager
 
 # Import cogs
 from cogs import Music, Info
@@ -83,6 +84,11 @@ class MusicBot(commands.Bot):
             'timestamp': time.time()
         })
         print(f'🗄️ Database system initialized and startup recorded')
+        
+        # Initialize logging and monitoring system
+        await logging_manager.start_monitoring(interval=60)  # Monitor every minute
+        logging_manager.bot_logger.info(f"Bot started successfully with {len(self.guilds)} servers")
+        print(f'📊 Logging and monitoring system initialized')
     
     async def on_command_error(self, ctx, error):
         """Global error handler using centralized error handling system"""
