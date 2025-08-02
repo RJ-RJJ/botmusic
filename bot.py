@@ -59,15 +59,12 @@ class MusicBot(commands.Bot):
         print(f'🤖 Bot ID: {self.user.id}')
         print(f'📊 Connected to {len(self.guilds)} guilds')
         
-        # Initialize systems
-        await self.initialize_systems()
-        
-        # Start periodic tasks
-        self.loop.create_task(self.periodic_health_check())
-        self.loop.create_task(self.update_status())
-        self.loop.create_task(self.periodic_database_optimization())
+        # Start periodic tasks (only start tasks that have corresponding methods)
+        # self.loop.create_task(self.periodic_health_check())
+        # self.loop.create_task(self.update_status())
+        # self.loop.create_task(self.periodic_database_optimization())
         self.loop.create_task(performance_monitor.start_periodic_monitoring())
-        self.loop.create_task(self.periodic_metric_recording())
+        # self.loop.create_task(self.periodic_metric_recording())
         
         # Import FFMPEG_EXECUTABLE here to avoid circular imports
         from config.settings import FFMPEG_EXECUTABLE
