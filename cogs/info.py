@@ -75,9 +75,9 @@ class Info(commands.Cog):
     `{PREFIX}popular` - Show most popular songs
     `{PREFIX}user_stats` - Show your music statistics
     `{PREFIX}monitoring` - Show system monitoring & health (Admin)
-    `{PREFIX}logs` - Show log files information (Admin)
     `{PREFIX}health` - Show detailed health report (Admin)
     `{PREFIX}metrics` - Show performance metrics dashboard (Admin)
+    `{PREFIX}logs` - Show log files information (Admin)
             """,
             inline=False
         )
@@ -832,7 +832,7 @@ class Info(commands.Cog):
             embed.color = discord.Color.red()
             await msg.edit(embed=embed)
 
-    @commands.command(name='monitoring', aliases=['monitor', 'health'])
+    @commands.command(name='monitoring', aliases=['monitor', 'system_monitor'])
     @commands.has_permissions(manage_guild=True)
     async def monitoring_status(self, ctx):
         """Show comprehensive system monitoring and health status."""
