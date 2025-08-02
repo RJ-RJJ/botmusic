@@ -385,7 +385,7 @@ class Music(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='debug', aliases=['status'])
+    @commands.command(name='debug', aliases=['debug_status', 'voice_debug'])
     async def _debug(self, ctx: commands.Context):
         """Shows bot status and debug information."""
         
