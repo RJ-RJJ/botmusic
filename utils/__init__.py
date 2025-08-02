@@ -20,6 +20,7 @@ from .error_handler import error_handler
 from .cache_manager import cache_manager
 from .database_manager import database_manager
 from .logging_manager import logging_manager
+from .health_monitor import health_monitor, initialize_health_monitor
 
 __all__ = [
     'VoiceError',
@@ -37,5 +38,7 @@ __all__ = [
     'error_handler',
     'cache_manager',
     'database_manager',
-    'logging_manager'
+    'logging_manager',
+    'health_monitor',
+    'initialize_health_monitor'
 ]

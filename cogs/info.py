@@ -12,6 +12,7 @@ from utils.error_handler import error_handler
 from utils.cache_manager import cache_manager
 from utils.database_manager import database_manager
 from utils.logging_manager import logging_manager
+from utils.health_monitor import health_monitor
 
 class Info(commands.Cog):
     """Information and help commands"""
@@ -74,6 +75,8 @@ class Info(commands.Cog):
     `{PREFIX}user_stats` - Show your music statistics
     `{PREFIX}monitoring` - Show system monitoring & health (Admin)
     `{PREFIX}logs` - Show log files information (Admin)
+    `{PREFIX}health` - Show detailed health report (Admin)
+    `{PREFIX}metrics` - Show performance metrics dashboard (Admin)
             """,
             inline=False
         )
@@ -1040,6 +1043,234 @@ class Info(commands.Cog):
         )
         
         embed.set_footer(text="Performance data collected since bot startup")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='health', aliases=['health_report', 'system_health'])
+    @commands.has_permissions(manage_guild=True)
+    async def health_report(self, ctx):
+        """Show detailed health report with all system checks."""
+        if not health_monitor:
+            return await ctx.send("❌ **Health monitoring system not initialized.**")
+        
+        health_data = health_monitor.get_detailed_health_report()
+        
+        embed = discord.Embed(
+            title="🏥 Detailed Health Report",
+            color=discord.Color.green() if health_data['overall_status']['status'] == 'healthy' else discord.Color.red()
+        )
+        
+        # Overall Status
+        status = health_data['overall_status']
+        status_icon = {
+            'healthy': '✅',
+            'degraded': '⚠️',
+            'unhealthy': '❌',
+            'critical': '🆘',
+            'unknown': '❓'
+        }.get(status['status'], '❓')
+        
+        embed.add_field(
+            name=f"{status_icon} Overall Health",
+            value=f"**Status:** {status['status'].title()}\n"
+                  f"**Message:** {status['message']}\n"
+                  f"**Last Check:** {status['last_check_formatted']}\n"
+                  f"**Checks Registered:** {status['checks_registered']}",
+            inline=False
+        )
+        
+        # Individual Health Checks
+        check_details = health_data['check_details']
+        if check_details:
+            check_info = ""
+            for name, details in check_details.items():
+                if details['last_result']:
+                    health_icon = "✅" if details['last_result'].get('healthy') else "❌"
+                    success_rate = details['success_rate']
+                    
+                    check_info += f"{health_icon} **{name.replace('_', ' ').title()}**\n"
+                    check_info += f"  Success Rate: {success_rate:.1f}% ({details['total_runs']} runs)\n"
+                    
+                    if not details['last_result'].get('healthy') and details['last_result'].get('error'):
+                        error_msg = details['last_result']['error'][:50] + "..." if len(details['last_result']['error']) > 50 else details['last_result']['error']
+                        check_info += f"  Error: {error_msg}\n"
+                    
+                    check_info += "\n"
+            
+            if len(check_info) > 1024:  # Discord field limit
+                check_info = check_info[:1020] + "..."
+            
+            embed.add_field(
+                name="🔍 Health Checks",
+                value=check_info or "No health check data available",
+                inline=False
+            )
+        
+        # Recent Alerts
+        alerts = health_data.get('recent_alerts', [])
+        if alerts:
+            alert_text = ""
+            for alert in alerts[:5]:  # Show last 5 alerts
+                severity_icon = {"high": "🚨", "medium": "⚠️", "low": "ℹ️"}.get(alert['severity'], "⚠️")
+                alert_text += f"{severity_icon} {alert['message']}\n"
+            
+            embed.add_field(
+                name="🚨 Recent Performance Alerts",
+                value=alert_text,
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="🚨 Performance Alerts",
+                value="No recent alerts",
+                inline=False
+            )
+        
+        embed.set_footer(text="Health checks run automatically every 1-10 minutes depending on type")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='metrics', aliases=['metrics_dashboard', 'perf_metrics'])
+    @commands.has_permissions(manage_guild=True)
+    async def metrics_dashboard(self, ctx):
+        """Show comprehensive performance metrics dashboard."""
+        if not health_monitor:
+            return await ctx.send("❌ **Health monitoring system not initialized.**")
+        
+        dashboard = health_monitor.get_performance_dashboard()
+        
+        embed = discord.Embed(
+            title="📊 Performance Metrics Dashboard",
+            description="Real-time system performance and trends",
+            color=discord.Color.blue()
+        )
+        
+        # System Metrics (Current)
+        sys_metrics = dashboard['system_metrics']
+        memory_info = sys_metrics.get('memory_usage_mb', {})
+        cpu_info = sys_metrics.get('cpu_usage_percent', {})
+        
+        if 'latest' in memory_info and 'latest' in cpu_info:
+            embed.add_field(
+                name="🖥️ Current System Status",
+                value=f"**Memory:** {memory_info['latest']:.1f} MB\n"
+                      f"**CPU:** {cpu_info['latest']:.1f}%\n"
+                      f"**Guilds:** {sys_metrics.get('guild_count', {}).get('latest', 0)}\n"
+                      f"**Voice Connections:** {sys_metrics.get('active_voice_connections', {}).get('latest', 0)}",
+                inline=True
+            )
+        
+        # Performance Trends (4-hour averages)
+        trends = dashboard['performance_trends']
+        memory_trend = trends.get('memory_percent', {})
+        cpu_trend = trends.get('cpu_usage_percent', {})
+        
+        if 'avg' in memory_trend and 'avg' in cpu_trend:
+            embed.add_field(
+                name="📈 4-Hour Trends",
+                value=f"**Avg Memory:** {memory_trend['avg']:.1f}% ({memory_trend.get('trend', 'stable')})\n"
+                      f"**Avg CPU:** {cpu_trend['avg']:.1f}% ({cpu_trend.get('trend', 'stable')})\n"
+                      f"**Memory Range:** {memory_trend.get('min', 0):.1f}% - {memory_trend.get('max', 0):.1f}%\n"
+                      f"**CPU Range:** {cpu_trend.get('min', 0):.1f}% - {cpu_trend.get('max', 0):.1f}%",
+                inline=True
+            )
+        
+        # Counters
+        counters = dashboard.get('counters', {})
+        if counters:
+            counter_text = ""
+            for counter, value in list(counters.items())[:8]:  # Show top 8 counters
+                counter_text += f"**{counter.replace('_', ' ').title()}:** {value}\n"
+            
+            embed.add_field(
+                name="🔢 Event Counters",
+                value=counter_text or "No counters available",
+                inline=True
+            )
+        
+        # Health Status Summary
+        health_status = dashboard['health_status']
+        health_icon = {
+            'healthy': '✅',
+            'degraded': '⚠️',
+            'unhealthy': '❌',
+            'critical': '🆘',
+            'unknown': '❓'
+        }.get(health_status['status'], '❓')
+        
+        embed.add_field(
+            name=f"{health_icon} Health Summary",
+            value=f"**Status:** {health_status['status'].title()}\n"
+                  f"**Checks:** {health_status['checks_registered']}\n"
+                  f"**Monitoring:** {'Active' if health_status['monitoring_active'] else 'Inactive'}\n"
+                  f"**Last Check:** {health_status['last_check_formatted']}",
+            inline=True
+        )
+        
+        # Active Alerts
+        alerts = dashboard.get('alerts', [])
+        if alerts:
+            alert_text = ""
+            for alert in alerts[:3]:  # Show top 3 alerts
+                severity_icon = {"high": "🚨", "medium": "⚠️", "low": "ℹ️"}.get(alert['severity'], "⚠️")
+                alert_text += f"{severity_icon} {alert['message']}\n"
+            
+            embed.add_field(
+                name="🚨 Active Alerts",
+                value=alert_text,
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="✅ System Status",
+                value="No active performance alerts",
+                inline=False
+            )
+        
+        embed.set_footer(text="Metrics updated every minute • Use ?health for detailed health checks")
+        await ctx.send(embed=embed)
+
+    @commands.command(name='system_status', aliases=['status', 'bot_status'])
+    async def system_status(self, ctx):
+        """Show quick system status overview (available to all users)."""
+        if not health_monitor:
+            return await ctx.send("❌ **Health monitoring system not initialized.**")
+        
+        health_status = health_monitor.get_health_status()
+        
+        # Simple status embed for all users
+        status_icon = {
+            'healthy': '✅',
+            'degraded': '⚠️',
+            'unhealthy': '❌',
+            'critical': '🆘',
+            'unknown': '❓'
+        }.get(health_status['status'], '❓')
+        
+        embed = discord.Embed(
+            title=f"{status_icon} Bot Status",
+            description=health_status['message'],
+            color=discord.Color.green() if health_status['status'] == 'healthy' else discord.Color.orange()
+        )
+        
+        # Basic info
+        embed.add_field(
+            name="📊 Basic Info",
+            value=f"**Servers:** {len(self.bot.guilds)}\n"
+                  f"**Uptime:** {health_status['last_check_formatted']}\n"
+                  f"**Monitoring:** {'Active' if health_status['monitoring_active'] else 'Inactive'}",
+            inline=True
+        )
+        
+        # Voice connections
+        active_voice = sum(1 for guild in self.bot.guilds if guild.voice_client)
+        embed.add_field(
+            name="🎵 Voice Status",
+            value=f"**Active Connections:** {active_voice}\n"
+                  f"**Voice Health:** {'Good' if active_voice < 10 else 'High Load'}\n"
+                  f"**Latency:** {self.bot.latency * 1000:.0f}ms",
+            inline=True
+        )
+        
+        embed.set_footer(text="For detailed diagnostics, admins can use ?health or ?monitoring")
         await ctx.send(embed=embed)
 
 async def setup(bot):
