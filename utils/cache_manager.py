@@ -139,11 +139,11 @@ class MusicCacheManager:
     """Main cache manager for music bot"""
     
     def __init__(self):
-        # Different caches for different data types
-        self.metadata_cache = LRUCache(max_size=2000, default_ttl=7200)  # 2 hours
-        self.stream_cache = LRUCache(max_size=500, default_ttl=1800)     # 30 minutes (URLs expire)
-        self.playlist_cache = LRUCache(max_size=200, default_ttl=3600)   # 1 hour
-        self.search_cache = LRUCache(max_size=1000, default_ttl=1800)    # 30 minutes
+        # Optimized cache TTLs based on usage patterns and data volatility
+        self.metadata_cache = LRUCache(max_size=2000, default_ttl=3600)  # 1 hour (reduced from 2 hours)
+        self.stream_cache = LRUCache(max_size=200, default_ttl=900)      # 15 minutes (reduced from 500/30min)
+        self.playlist_cache = LRUCache(max_size=200, default_ttl=1800)   # 30 minutes (reduced from 1 hour)
+        self.search_cache = LRUCache(max_size=1000, default_ttl=1800)    # 30 minutes (kept same)
         
         # Cache persistence
         self.cache_dir = Path("cache")

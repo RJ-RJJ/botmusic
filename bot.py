@@ -22,6 +22,7 @@ from utils.memory_manager import memory_manager
 from utils.error_handler import error_handler
 from utils.cache_manager import cache_manager
 from utils.database_manager import database_manager
+from utils.monitoring import performance_monitor, record_memory_usage, record_ffmpeg_count, record_cache_hit_rate
 from utils.logging_manager import logging_manager
 from utils.health_monitor import initialize_health_monitor
 
@@ -54,9 +55,19 @@ class MusicBot(commands.Bot):
     
     async def on_ready(self):
         """Called when bot is ready and connected"""
-        print(f'✅ Bot ready! Logged in as {self.user}')
-        print(f'🎵 Connected to {len(self.guilds)} servers')
-        print(f'🎵 Using Python with yt-dlp')
+        print(f'✅ {self.user} has connected to Discord!')
+        print(f'🤖 Bot ID: {self.user.id}')
+        print(f'📊 Connected to {len(self.guilds)} guilds')
+        
+        # Initialize systems
+        await self.initialize_systems()
+        
+        # Start periodic tasks
+        self.loop.create_task(self.periodic_health_check())
+        self.loop.create_task(self.update_status())
+        self.loop.create_task(self.periodic_database_optimization())
+        self.loop.create_task(performance_monitor.start_periodic_monitoring())
+        self.loop.create_task(self.periodic_metric_recording())
         
         # Import FFMPEG_EXECUTABLE here to avoid circular imports
         from config.settings import FFMPEG_EXECUTABLE

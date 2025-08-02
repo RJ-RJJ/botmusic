@@ -40,9 +40,12 @@ class VoiceState:
         # Playlist auto-continue support
         self.current_playlist = None  # Stores playlist info
         self.playlist_position = 0    # Current position in playlist
-        self.playlist_batch_size = PLAYLIST_BATCH_SIZE
-        self.playlist_low_threshold = PLAYLIST_LOW_THRESHOLD
-        self.concurrent_load_limit = CONCURRENT_LOAD_LIMIT
+        
+        # Dynamic playlist batch sizing based on guild member count
+        guild_size = len(ctx.guild.members) if ctx.guild else 50
+        self.playlist_batch_size = min(5 + (guild_size // 20), 20)  # 5-20 songs based on guild size
+        self.playlist_low_threshold = max(3, self.playlist_batch_size // 3)  # 1/3 of batch size, minimum 3
+        self.concurrent_load_limit = min(5 + (guild_size // 30), 10)  # 5-10 concurrent loads
         self._background_loading = False  # Flag to prevent multiple background loads
 
         self.audio_player = bot.loop.create_task(self.audio_player_task())
