@@ -170,11 +170,18 @@ class MusicCacheManager:
         """Normalize URL for consistent caching"""
         # Remove tracking parameters and normalize
         if 'youtube.com' in url or 'youtu.be' in url:
-            # Extract video ID
             import re
+            
+            # Check for playlist first (YouTube/YouTube Music playlists)
+            playlist_match = re.search(r'[?&]list=([a-zA-Z0-9_-]+)', url)
+            if playlist_match:
+                return f"https://www.youtube.com/playlist?list={playlist_match.group(1)}"
+            
+            # Then check for video ID
             video_id_match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
             if video_id_match:
                 return f"https://www.youtube.com/watch?v={video_id_match.group(1)}"
+        
         return url.split('?')[0]  # Remove query parameters for other URLs
     
     async def get_song_metadata(self, search_query: str) -> Optional[Dict[str, Any]]:

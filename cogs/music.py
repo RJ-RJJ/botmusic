@@ -765,6 +765,49 @@ class Music(commands.Cog):
             if ctx.voice_client.channel != ctx.author.voice.channel:
                 raise commands.CommandError('Bot is already in a voice channel.')
 
+    @commands.command(name='clear_playlist_cache', aliases=['clearplcache', 'resetplcache'])
+    @commands.has_permissions(manage_guild=True)
+    async def _clear_playlist_cache(self, ctx: commands.Context):
+        """Clear playlist cache to fix stuck playlist issues (Manage Server permission required)."""
+        try:
+            from utils.cache_manager import cache_manager
+            
+            # Get stats before clearing
+            cache_entries = len(cache_manager.playlist_cache.cache)
+            
+            # Clear playlist cache
+            cache_manager.playlist_cache.clear()
+            
+            # Clear current playlist state
+            await ctx.voice_state.clear_playlist()
+            
+            embed = discord.Embed(
+                title="🧹 Playlist Cache Cleared",
+                description="Playlist cache has been reset to fix stuck playlist issues",
+                color=discord.Color.orange()
+            )
+            
+            embed.add_field(
+                name="📊 Cleared Data",
+                value=f"**Playlist Cache Entries:** {cache_entries}\n"
+                      f"**Current Playlist State:** Cleared",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="✅ What This Fixes",
+                value="• Stuck on old playlist after ?stop\n"
+                      "• Wrong playlist name showing\n"
+                      "• Playlist switching issues",
+                inline=False
+            )
+            
+            embed.set_footer(text="Try loading your playlist again after this command")
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error clearing playlist cache: {str(e)}")
+
 async def setup(bot):
     """Setup function for the cog"""
     await bot.add_cog(Music(bot))
