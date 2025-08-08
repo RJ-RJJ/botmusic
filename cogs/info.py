@@ -21,7 +21,7 @@ class Info(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command(name='help')
+    @commands.hybrid_command(name='help', description='Show help for bot commands')
     async def help_command(self, ctx):
         """Shows this help message."""
         embed = discord.Embed(
@@ -108,7 +108,7 @@ class Info(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='stats', aliases=['statistics', 'info'])
+    @commands.hybrid_command(name='stats', aliases=['statistics', 'info'], description='Show bot statistics')
     async def stats_command(self, ctx):
         """Shows simple bot statistics and current status."""
         embed = discord.Embed(
@@ -164,11 +164,11 @@ class Info(commands.Cog):
             inline=False
         )
         
-        embed.set_footer(text=f"Use {PREFIX}help for commands")
+        embed.set_footer(text=f"Use /help for commands")
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='platforms', aliases=['sites', 'support'])
+    @commands.hybrid_command(name='platforms', aliases=['sites', 'support'], description='Show supported platforms')
     async def supported_platforms(self, ctx):
         """Shows detailed information about supported platforms."""
         embed = discord.Embed(
@@ -242,7 +242,7 @@ class Info(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='memory', aliases=['mem', 'ram'])
+    @commands.hybrid_command(name='memory', aliases=['mem', 'ram'], description='Show memory usage (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def memory_stats(self, ctx):
         """Shows memory usage and management statistics."""
@@ -300,10 +300,10 @@ class Info(commands.Cog):
                 inline=False
             )
         
-        embed.set_footer(text="Use ?cleanup to force memory cleanup")
+        embed.set_footer(text="Use /cleanup to force memory cleanup")
         await ctx.send(embed=embed)
 
-    @commands.command(name='cleanup')
+    @commands.hybrid_command(name='cleanup', description='Force memory cleanup (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def force_cleanup(self, ctx):
         """Force memory cleanup and garbage collection."""
@@ -360,7 +360,7 @@ class Info(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='errors', aliases=['error_stats', 'errstats'])
+    @commands.hybrid_command(name='errors', aliases=['error_stats', 'errstats'], description='Show error statistics (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def error_statistics(self, ctx):
         """Shows error statistics and most common errors."""
@@ -413,10 +413,10 @@ class Info(commands.Cog):
                 inline=False
             )
         
-        embed.set_footer(text="Use ?cleanup to clear error logs")
+        embed.set_footer(text="Use /cleanup to clear error logs")
         await ctx.send(embed=embed)
 
-    @commands.command(name='test_error', aliases=['testerr'])
+    @commands.hybrid_command(name='test_error', aliases=['testerr'], description='Trigger test errors (Admin)')
     @commands.has_permissions(administrator=True)
     async def test_error_handling(self, ctx, error_type: str = "user"):
         """Test the error handling system (Admin only)."""
@@ -441,7 +441,7 @@ class Info(commands.Cog):
         else:
             await ctx.send("Available test types: `user`, `voice`, `music`, `permission`, `system`")
 
-    @commands.command(name='cache', aliases=['cache_stats', 'cacheinfo'])
+    @commands.hybrid_command(name='cache', aliases=['cache_stats', 'cacheinfo'], description='Show cache statistics (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def cache_statistics(self, ctx):
         """Shows cache statistics and performance metrics."""
@@ -506,10 +506,10 @@ class Info(commands.Cog):
                 inline=True
             )
         
-        embed.set_footer(text=f"Cache Dir Size: {stats['cache_dir_size'] // 1024}KB • Use ?cache_clear to reset")
+        embed.set_footer(text=f"Cache Dir Size: {stats['cache_dir_size'] // 1024}KB • Use /cache_clear to reset")
         await ctx.send(embed=embed)
 
-    @commands.command(name='cache_clear', aliases=['clearcache', 'resetcache'])
+    @commands.hybrid_command(name='cache_clear', aliases=['clearcache', 'resetcache'], description='Clear all cache data (Admin)')
     @commands.has_permissions(administrator=True)
     async def clear_cache(self, ctx):
         """Clear all cache data (Admin only)."""
@@ -549,7 +549,7 @@ class Info(commands.Cog):
         embed.set_footer(text="Cache performance will rebuild as songs are played")
         await ctx.send(embed=embed)
 
-    @commands.command(name='cache_warm', aliases=['warmcache'])
+    @commands.hybrid_command(name='cache_warm', aliases=['warmcache'], description='Warm cache with popular songs (Admin)')
     @commands.has_permissions(administrator=True)
     async def warm_cache(self, ctx, *, songs: str = ""):
         """Pre-warm cache with popular songs (Admin only)."""
@@ -610,7 +610,7 @@ class Info(commands.Cog):
             embed.color = discord.Color.red()
             await msg.edit(embed=embed)
 
-    @commands.command(name='database', aliases=['db', 'db_stats'])
+    @commands.hybrid_command(name='database', aliases=['db', 'db_stats'], description='Show database statistics (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def database_statistics(self, ctx):
         """Shows database statistics and performance metrics."""
@@ -666,7 +666,7 @@ class Info(commands.Cog):
         embed.set_footer(text="Use ?db_optimize to optimize database performance")
         await ctx.send(embed=embed)
 
-    @commands.command(name='popular', aliases=['top_songs', 'most_played'])
+    @commands.hybrid_command(name='popular', aliases=['top_songs', 'most_played'], description='Show most popular songs')
     async def popular_songs(self, ctx, scope: str = "server"):
         """Show most popular songs (server/global)."""
         
@@ -702,7 +702,7 @@ class Info(commands.Cog):
         embed.set_footer(text="Statistics update in real-time as songs are played")
         await ctx.send(embed=embed)
 
-    @commands.command(name='user_stats', aliases=['my_stats', 'profile'])
+    @commands.hybrid_command(name='user_stats', aliases=['my_stats', 'profile'], description='Show your music statistics')
     async def user_statistics(self, ctx, user: discord.Member = None):
         """Show music statistics for a user."""
         
@@ -711,7 +711,7 @@ class Info(commands.Cog):
         
         if not stats:
             if target_user == ctx.author:
-                return await ctx.send("📊 **You haven't played any music yet!**\nUse `?play <song>` to start building your statistics.")
+                return await ctx.send("📊 **You haven't played any music yet!**\nUse `/play <song>` to start building your statistics.")
             else:
                 return await ctx.send(f"📊 **{target_user.display_name} hasn't played any music in this server yet.**")
         
@@ -747,7 +747,7 @@ class Info(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='db_optimize', aliases=['optimize_db'])
+    @commands.hybrid_command(name='db_optimize', aliases=['optimize_db'], description='Optimize database performance (Admin)')
     @commands.has_permissions(administrator=True)
     async def optimize_database(self, ctx):
         """Optimize database performance (Admin only)."""
@@ -790,7 +790,7 @@ class Info(commands.Cog):
             embed.color = discord.Color.red()
             await msg.edit(embed=embed)
 
-    @commands.command(name='db_backup', aliases=['backup_db'])
+    @commands.hybrid_command(name='db_backup', aliases=['backup_db'], description='Backup the database (Admin)')
     @commands.has_permissions(administrator=True)
     async def backup_database(self, ctx):
         """Create database backup (Admin only)."""
@@ -832,7 +832,7 @@ class Info(commands.Cog):
             embed.color = discord.Color.red()
             await msg.edit(embed=embed)
 
-    @commands.command(name='monitoring', aliases=['monitor', 'system_monitor'])
+    @commands.hybrid_command(name='monitoring', aliases=['monitor', 'system_monitor'], description='Show monitoring & health (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def monitoring_status(self, ctx):
         """Show comprehensive system monitoring and health status."""
@@ -904,7 +904,7 @@ class Info(commands.Cog):
         embed.set_footer(text=f"Alert Thresholds: {threshold_text}")
         await ctx.send(embed=embed)
 
-    @commands.command(name='logs', aliases=['log_files', 'loginfo'])
+    @commands.hybrid_command(name='logs', aliases=['log_files', 'loginfo'], description='Show log files info (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def log_files_info(self, ctx):
         """Show information about log files."""
@@ -940,11 +940,11 @@ class Info(commands.Cog):
         
         # Total size
         total_size = sum(f['size_mb'] for f in log_files)
-        embed.set_footer(text=f"Total: {len(log_files)} files, {total_size:.2f} MB • Use ?export_logs to download")
+        embed.set_footer(text=f"Total: {len(log_files)} files, {total_size:.2f} MB • Use /export_logs to download")
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='export_logs', aliases=['download_logs'])
+    @commands.hybrid_command(name='export_logs', aliases=['download_logs'], description='Export logs for download (Admin)')
     @commands.has_permissions(administrator=True)
     async def export_logs(self, ctx, log_type: str = "all", hours: int = 24):
         """Export logs for download (Admin only)."""
@@ -991,7 +991,7 @@ class Info(commands.Cog):
             embed.color = discord.Color.red()
             await msg.edit(embed=embed)
 
-    @commands.command(name='performance', aliases=['perf', 'performance_stats'])
+    @commands.hybrid_command(name='performance', aliases=['perf', 'performance_stats'], description='Show performance statistics (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def performance_statistics(self, ctx):
         """Show detailed performance statistics."""
@@ -1046,7 +1046,7 @@ class Info(commands.Cog):
         embed.set_footer(text="Performance data collected since bot startup")
         await ctx.send(embed=embed)
 
-    @commands.command(name='health', aliases=['health_report', 'system_health'])
+    @commands.hybrid_command(name='health', aliases=['health_report', 'system_health'], description='Show detailed health report (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def health_report(self, ctx):
         """Show detailed health report with all system checks."""
@@ -1129,7 +1129,7 @@ class Info(commands.Cog):
         embed.set_footer(text="Health checks run automatically every 1-10 minutes depending on type")
         await ctx.send(embed=embed)
 
-    @commands.command(name='metrics', aliases=['metrics_dashboard', 'perf_metrics'])
+    @commands.hybrid_command(name='metrics', aliases=['metrics_dashboard', 'perf_metrics'], description='Show performance metrics dashboard (Admin)')
     @commands.has_permissions(manage_guild=True)
     async def metrics_dashboard(self, ctx):
         """Show comprehensive performance metrics dashboard."""
@@ -1229,7 +1229,7 @@ class Info(commands.Cog):
         embed.set_footer(text="Metrics updated every minute • Use ?health for detailed health checks")
         await ctx.send(embed=embed)
 
-    @commands.command(name='system_status', aliases=['status', 'bot_status'])
+    @commands.hybrid_command(name='system_status', aliases=['status', 'bot_status'], description='Show quick system status overview')
     async def system_status(self, ctx):
         """Show quick system status overview (available to all users)."""
         if not health_monitor:

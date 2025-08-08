@@ -51,7 +51,12 @@ class MusicBot(commands.Bot):
         await self.add_cog(Music(self))
         await self.add_cog(Info(self))
         
-        print("✅ All cogs loaded successfully")
+        # Sync application (slash) commands
+        try:
+            synced = await self.tree.sync()
+            print(f"✅ All cogs loaded successfully • Synced {len(synced)} application commands")
+        except Exception as sync_error:
+            print(f"⚠️ Failed to sync application commands: {sync_error}")
     
     async def on_ready(self):
         """Called when bot is ready and connected"""
@@ -103,6 +108,13 @@ class MusicBot(commands.Bot):
         health_monitor = initialize_health_monitor(self)
         await health_monitor.start_monitoring(interval=60)  # Health checks every minute
         print(f'🏥 Health monitoring system initialized with {len(health_monitor.health_checks)} checks')
+        
+        # Log that slash commands are ready
+        try:
+            cmds = await self.tree.fetch_commands()
+            print(f'💬 Slash commands ready: {len(cmds)} registered')
+        except Exception:
+            pass
     
     async def on_command_error(self, ctx, error):
         """Global error handler using centralized error handling system"""

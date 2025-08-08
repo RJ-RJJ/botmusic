@@ -55,7 +55,7 @@ class Music(commands.Cog):
         """Handle cog-specific errors using centralized error handler"""
         await error_handler.handle_error(error, ctx, "Music Cog Error")
 
-    @commands.command(name='join', invoke_without_subcommand=True)
+    @commands.hybrid_command(name='join', invoke_without_subcommand=True, description='Join your voice channel')
     async def _join(self, ctx: commands.Context):
         """Joins a voice channel."""
 
@@ -69,7 +69,7 @@ class Music(commands.Cog):
         # Restart audio player task now that we have a voice connection
         await ctx.voice_state._restart_audio_player_if_needed()
 
-    @commands.command(name='summon')
+    @commands.hybrid_command(name='summon', description='Summon the bot to a specific voice channel')
     @commands.has_permissions(manage_guild=True)
     async def _summon(self, ctx: commands.Context, *, channel: discord.VoiceChannel = None):
         """Summons the bot to a voice channel.
@@ -89,7 +89,7 @@ class Music(commands.Cog):
         # Restart audio player task now that we have a voice connection
         await ctx.voice_state._restart_audio_player_if_needed()
 
-    @commands.command(name='leave', aliases=['disconnect'])
+    @commands.hybrid_command(name='leave', aliases=['disconnect'], description='Leave voice channel and clear the queue')
     @commands.has_permissions(manage_guild=True)
     async def _leave(self, ctx: commands.Context):
         """Clears the queue and leaves the voice channel."""
@@ -100,7 +100,7 @@ class Music(commands.Cog):
         await ctx.voice_state.stop()
         del self.voice_states[ctx.guild.id]
 
-    @commands.command(name='volume', aliases=['vol'])
+    @commands.hybrid_command(name='volume', aliases=['vol'], description='Set or check the volume (1-100)')
     async def _volume(self, ctx: commands.Context, volume: int = None):
         """Sets the volume of the player or shows current volume."""
 
@@ -127,7 +127,7 @@ class Music(commands.Cog):
         volume_bar = "█" * (volume // 5) + "░" * (20 - (volume // 5))
         await ctx.send(f'🔊 Volume set to **{volume}%**\n`{volume_bar}` {volume}%')
 
-    @commands.command(name='now', aliases=['current', 'playing'])
+    @commands.hybrid_command(name='now', aliases=['current', 'playing'], description='Show the currently playing song')
     async def _now(self, ctx: commands.Context):
         """Displays the currently playing song with enhanced details."""
         
@@ -170,25 +170,25 @@ class Music(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='pause')
+    @commands.hybrid_command(name='pause', description='Pause the currently playing song')
     @commands.has_permissions(manage_guild=True)
     async def _pause(self, ctx: commands.Context):
         """Pauses the currently playing song."""
 
         if ctx.voice_state.is_playing and ctx.voice_state.voice.is_playing():
             ctx.voice_state.voice.pause()
-            await ctx.message.add_reaction('⏯️')
+            await ctx.send('⏸️ Paused')
 
-    @commands.command(name='resume')
+    @commands.hybrid_command(name='resume', description='Resume the paused song')
     @commands.has_permissions(manage_guild=True)
     async def _resume(self, ctx: commands.Context):
         """Resumes a currently paused song."""
 
         if ctx.voice_state.is_playing and ctx.voice_state.voice.is_paused():
             ctx.voice_state.voice.resume()
-            await ctx.message.add_reaction('⏯️')
+            await ctx.send('▶️ Resumed')
 
-    @commands.command(name='stop')
+    @commands.hybrid_command(name='stop', description='Stop playback and clear the queue')
     @commands.has_permissions(manage_guild=True)
     async def _stop(self, ctx: commands.Context):
         """Stops playing song and clears the queue."""
@@ -199,9 +199,9 @@ class Music(commands.Cog):
         if ctx.voice_state.is_playing:
             ctx.voice_state.voice.stop()
             
-        await ctx.message.add_reaction('⏹️')
+        await ctx.send('⏹️ Stopped and cleared queue')
 
-    @commands.command(name='skip')
+    @commands.hybrid_command(name='skip', description='Vote to skip the current song')
     async def _skip(self, ctx: commands.Context):
         """Vote to skip a song. The requester can automatically skip.
         3 skip votes are needed for the song to be skipped.
@@ -212,7 +212,7 @@ class Music(commands.Cog):
 
         voter = ctx.message.author
         if voter == ctx.voice_state.current.requester:
-            await ctx.message.add_reaction('⏭️')
+            await ctx.send('⏭️ Skipped')
             ctx.voice_state.skip()
 
         elif voter.id not in ctx.voice_state.skip_votes:
@@ -220,7 +220,7 @@ class Music(commands.Cog):
             total_votes = len(ctx.voice_state.skip_votes)
 
             if total_votes >= 3:
-                await ctx.message.add_reaction('⏭️')
+                await ctx.send('⏭️ Skipped by vote')
                 ctx.voice_state.skip()
             else:
                 await ctx.send('Skip vote added, currently **{}/3**'.format(total_votes))
@@ -228,7 +228,7 @@ class Music(commands.Cog):
         else:
             await ctx.send('You have already voted to skip this song.')
 
-    @commands.command(name='queue', aliases=['q'])
+    @commands.hybrid_command(name='queue', aliases=['q'], description='Show the music queue (paginated)')
     async def _queue(self, ctx: commands.Context, *, page: int = 1):
         """Shows the player's queue.
         You can optionally specify the page to show. Each page contains 10 elements.
@@ -285,7 +285,7 @@ class Music(commands.Cog):
             showing_start = start + 1
             showing_end = min(end, total_songs)
             description = f'**{total_songs} tracks in queue** (showing {showing_start}-{showing_end}):\n\n{queue}{playlist_info}'
-            footer_text = 'Page {}/{} • Use ?queue <page> to navigate'.format(page, pages)
+            footer_text = 'Page {}/{} • Use /queue page:<n> to navigate'.format(page, pages)
         
         embed = (discord.Embed(
             title="📋 Music Queue", 
@@ -295,7 +295,7 @@ class Music(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='shuffle')
+    @commands.hybrid_command(name='shuffle', description='Shuffle the current queue')
     async def _shuffle(self, ctx: commands.Context):
         """Shuffles the current queue. Note: This only shuffles loaded songs, not the entire playlist."""
 
@@ -311,11 +311,11 @@ class Music(commands.Cog):
                 await ctx.send(f'🔀 Shuffled {len(ctx.voice_state.songs)} songs in queue\n'
                              f'📀 {remaining} more songs will load in original playlist order')
             else:
-                await ctx.message.add_reaction('🔀')
+                await ctx.send('🔀 Shuffled')
         else:
-            await ctx.message.add_reaction('🔀')
+            await ctx.send('🔀 Shuffled')
 
-    @commands.command(name='remove')
+    @commands.hybrid_command(name='remove', description='Remove a song from the queue by number')
     async def _remove(self, ctx: commands.Context, index: int):
         """Removes a song from the queue at a given index."""
 
@@ -323,9 +323,9 @@ class Music(commands.Cog):
             return await ctx.send('Empty queue.')
 
         ctx.voice_state.songs.remove(index - 1)
-        await ctx.message.add_reaction('✅')
+        await ctx.send(f'✅ Removed song #{index}')
 
-    @commands.command(name='loop')
+    @commands.hybrid_command(name='loop', description='Toggle loop for the current song')
     async def _loop(self, ctx: commands.Context):
         """Loops the currently playing song.
         Invoke this command again to unloop the song.
@@ -342,7 +342,7 @@ class Music(commands.Cog):
         else:
             await ctx.send('➡️ **Loop disabled** - Playlist/Song will continue normally')
     
-    @commands.command(name='playlist', aliases=['pl'])
+    @commands.hybrid_command(name='playlist', aliases=['pl'], description='Show current playlist status')
     async def _playlist(self, ctx: commands.Context):
         """Shows current playlist status and information."""
         
@@ -386,7 +386,7 @@ class Music(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='debug', aliases=['debug_status', 'voice_debug'])
+    @commands.hybrid_command(name='debug', aliases=['debug_status', 'voice_debug'], description='Show bot voice/debug information')
     async def _debug(self, ctx: commands.Context):
         """Shows bot status and debug information."""
         
@@ -522,7 +522,7 @@ class Music(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='fix', aliases=['restart'])
+    @commands.hybrid_command(name='fix', aliases=['restart'], description='Attempt to fix/restart the audio player')
     async def _fix(self, ctx: commands.Context):
         """Restart the audio player if it gets stuck."""
         
@@ -558,11 +558,11 @@ class Music(commands.Cog):
             embed.add_field(name="🎵 Result", value=f"Audio player restarted! {queue_count} songs in queue should start playing.", inline=False)
             embed.color = discord.Color.green()
         else:
-            embed.add_field(name="📝 Result", value="Audio player restarted, but queue is empty. Add songs with `?play`", inline=False)
+            embed.add_field(name="📝 Result", value="Audio player restarted, but queue is empty. Add songs with `/play`", inline=False)
         
         await ctx.send(embed=embed)
 
-    @commands.command(name='play', aliases=['p'])
+    @commands.hybrid_command(name='play', aliases=['p'], description='Play a song or playlist by name or URL')
     async def _play(self, ctx: commands.Context, *, search: str):
         """Plays a song or playlist.
         If there are songs in the queue, this will be queued until the
@@ -574,6 +574,13 @@ class Music(commands.Cog):
 
         if not ctx.voice_state.voice:
             await ctx.invoke(self._join)
+
+        # If invoked as a slash command, defer to avoid interaction timeout
+        try:
+            if getattr(ctx, "interaction", None):
+                await ctx.defer()
+        except Exception:
+            pass
 
         async with ctx.typing():
             # Check for unsupported URLs first
@@ -765,7 +772,7 @@ class Music(commands.Cog):
             if ctx.voice_client.channel != ctx.author.voice.channel:
                 raise commands.CommandError('Bot is already in a voice channel.')
 
-    @commands.command(name='clear_playlist_cache', aliases=['clearplcache', 'resetplcache'])
+    @commands.hybrid_command(name='clear_playlist_cache', aliases=['clearplcache', 'resetplcache'], description='Clear playlist cache to resolve issues')
     @commands.has_permissions(manage_guild=True)
     async def _clear_playlist_cache(self, ctx: commands.Context):
         """Clear playlist cache to fix stuck playlist issues (Manage Server permission required)."""
