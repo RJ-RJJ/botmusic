@@ -36,7 +36,7 @@ FFMPEG_EXECUTABLE = get_ffmpeg_executable()
 
 # FFmpeg options (Enhanced for hosting stability)
 FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_at_eof 1 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx -http_persistent 0',
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_at_eof 1 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx',
     'options': '-vn -bufsize 512k -maxrate 128k'
 }
 

@@ -21,6 +21,20 @@ class Info(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    async def _maybe_defer(self, ctx: commands.Context):
+        """Defer interaction response for slash-invoked hybrid commands to avoid 404 Unknown interaction."""
+        try:
+            interaction = getattr(ctx, "interaction", None)
+            if interaction and not interaction.response.is_done():
+                await interaction.response.defer()
+        except Exception:
+            # Safe no-op if already responded or not an interaction
+            pass
+
+    async def cog_before_invoke(self, ctx: commands.Context):
+        # Ensure we defer early for any slash-invoked hybrid command in this cog
+        await self._maybe_defer(ctx)
+
     @commands.hybrid_command(name='help', description='Show help for bot commands')
     async def help_command(self, ctx):
         """Shows this help message."""

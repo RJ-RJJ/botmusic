@@ -26,6 +26,15 @@ class Music(commands.Cog):
         self.bot = bot
         self.voice_states = {}
 
+    async def _maybe_defer(self, ctx: commands.Context):
+        """Defer interaction response for slash-invoked hybrid commands to avoid 404 Unknown interaction."""
+        try:
+            interaction = getattr(ctx, "interaction", None)
+            if interaction and not interaction.response.is_done():
+                await interaction.response.defer()
+        except Exception:
+            pass
+
     def get_voice_state(self, ctx: commands.Context):
         """Get or create voice state for a guild"""
         state = self.voice_states.get(ctx.guild.id)
@@ -49,6 +58,7 @@ class Music(commands.Cog):
 
     async def cog_before_invoke(self, ctx: commands.Context):
         """Set up voice state before each command"""
+        await self._maybe_defer(ctx)
         ctx.voice_state = self.get_voice_state(ctx)
 
     async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError):
