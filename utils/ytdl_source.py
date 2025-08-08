@@ -250,10 +250,25 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 if 'entries' not in info:
                     new_stream_url = info['url']
                 else:
-                    if info['entries'] and info['entries'][0]:
-                        new_stream_url = info['entries'][0]['url']
-                    else:
-                        raise YTDLError("No valid entries found")
+                    # When a watch URL is part of a playlist/context, yt-dlp may return multiple entries.
+                    # Pick the entry that matches this track's ID/webpage_url; otherwise fall back to first.
+                    target_id = self.data.get('id')
+                    selected = None
+                    for entry in info.get('entries') or []:
+                        if not entry:
+                            continue
+                        if target_id and entry.get('id') == target_id:
+                            selected = entry
+                            break
+                        if entry.get('webpage_url') == webpage_url:
+                            selected = entry
+                            break
+                    if not selected:
+                        # Fallback to first valid entry
+                        selected = next((e for e in info['entries'] if e), None)
+                    if not selected or 'url' not in selected:
+                        raise YTDLError("No valid matching entry found for stream URL refresh")
+                    new_stream_url = selected['url']
                 
                 # Cache the new stream URL
                 await cache_manager.cache_stream_url(webpage_url, new_stream_url)

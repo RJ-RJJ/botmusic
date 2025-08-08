@@ -36,13 +36,13 @@ FFMPEG_EXECUTABLE = get_ffmpeg_executable()
 
 # FFmpeg options (Enhanced for hosting stability)
 FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_at_eof 1 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx',
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_at_eof 1 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx -http_persistent 0',
     'options': '-vn -bufsize 512k -maxrate 128k'
 }
 
 # yt-dlp options (Optimized for speed & hosting stability)
 YDL_OPTIONS = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio[ext=m4a]/bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
     'noplaylist': False,  # Enable playlist support
@@ -64,6 +64,8 @@ YDL_OPTIONS = {
     'http_chunk_size': 10485760,  # 10MB chunks for better streaming
     'keepalive': True,          # Keep connections alive
     'prefer_free_formats': True, # Prefer formats that work better on hosting
+    'force_ipv4': True,
+    'geo_bypass': True,
 }
 
 # Voice State Configuration

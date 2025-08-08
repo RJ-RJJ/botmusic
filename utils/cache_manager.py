@@ -432,13 +432,19 @@ class MusicCacheManager:
         
         overall_hit_rate = (total_hits / total_requests * 100) if total_requests > 0 else 0
         
+        # Inline performance improvement calculation to avoid recursion
+        if overall_hit_rate > 0:
+            improvement_str = f"{(overall_hit_rate / 100) * 10:.1f}x faster"
+        else:
+            improvement_str = "No improvement yet"
+        
         return {
             'overall_hit_rate': round(overall_hit_rate, 2),
             'total_hits': total_hits,
             'total_requests': total_requests,
             'memory_saved_estimate': self._estimate_memory_saved(),
             'api_calls_saved': total_hits,  # Each hit = 1 saved API call
-            'performance_improvement': self._calculate_performance_improvement(),
+            'performance_improvement': improvement_str,
             'top_cached_items': self._get_top_cached_items()
         }
     
@@ -460,15 +466,9 @@ class MusicCacheManager:
             return f"{total_bytes} bytes"
     
     def _calculate_performance_improvement(self) -> str:
-        """Calculate estimated performance improvement"""
-        stats = self.get_comprehensive_stats()
-        overall_hit_rate = self.get_cache_efficiency_report()['overall_hit_rate']
-        
-        if overall_hit_rate > 0:
-            # Assume cached operations are 10x faster than API calls
-            improvement = (overall_hit_rate / 100) * 10
-            return f"{improvement:.1f}x faster"
-        return "No improvement yet"
+        """Deprecated: kept for backward compatibility, uses current report without recursion"""
+        report = self.get_cache_efficiency_report()
+        return report.get('performance_improvement', 'No improvement yet')
     
     def _get_top_cached_items(self) -> List[Dict[str, Any]]:
         """Get top cached items across all caches"""
