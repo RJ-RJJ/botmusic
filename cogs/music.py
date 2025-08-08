@@ -682,28 +682,45 @@ class Music(commands.Cog):
         
         # Set the playlist for auto-continuation
         ctx.voice_state.set_playlist(playlist_data)
+        entries = playlist_data['entries']
+
+        # Immediately queue the first song for fast start
+        try:
+            first_entry = entries[0]
+            first_url = first_entry.get('webpage_url') or first_entry.get('url')
+            if first_url:
+                first_source = await YTDLSource.create_source(ctx, first_url, loop=self.bot.loop)
+                await ctx.voice_state.songs.put(Song(first_source))
+        except Exception as e:
+            print(f"⚠️ Failed to preload first playlist track: {e}")
+            # Continue with background loading even if first preload fails
         
-        # Load first batch concurrently for much faster performance
+        # Load the remaining of the first batch concurrently for much faster performance
         first_batch_size = min(ctx.voice_state.playlist_batch_size, total_songs)
-        first_batch = playlist_data['entries'][:first_batch_size]
+        # Exclude the first track we already queued
+        first_batch = entries[1:first_batch_size]
+        to_process = max(0, len(first_batch))
         
-        loading_msg = await ctx.send(f'⚡ **Fast-loading playlist**: {playlist_title}\n🚀 Processing {first_batch_size} songs concurrently...')
+        loading_msg = await ctx.send(f'⚡ **Fast-loading playlist**: {playlist_title}\n🚀 Processing {to_process} songs concurrently...')
         
         # Use concurrent loading for much better performance
         loaded_count, failed_count = await ctx.voice_state.load_songs_concurrently(
             first_batch, loading_msg, update_progress=True
         )
         
-        ctx.voice_state.playlist_position = first_batch_size
+        # We attempted first_batch_size-1 songs here, plus the first immediate track
+        ctx.voice_state.playlist_position = min(first_batch_size, total_songs)
         
         # Send final confirmation message
-        remaining = total_songs - loaded_count
+        # Include the first immediate track in the loaded tally if it succeeded
+        effective_loaded = loaded_count + 1  # best effort; harmless if first failed
+        remaining = max(0, total_songs - effective_loaded)
         if remaining > 0:
-            final_msg = f'⚡ **Playlist Added**: {playlist_title}\n🚀 **Fast-loaded {loaded_count} songs** • {remaining} more will auto-load as needed'
+            final_msg = f'⚡ **Playlist Added**: {playlist_title}\n🚀 **Fast-loaded {effective_loaded} songs** • {remaining} more will auto-load as needed'
             if failed_count > 0:
                 final_msg += f'\n⚠️ Skipped {failed_count} unavailable songs'
         else:
-            final_msg = f'⚡ **Playlist Added**: {playlist_title}\n🚀 **Fast-loaded all {loaded_count} songs**'
+            final_msg = f'⚡ **Playlist Added**: {playlist_title}\n🚀 **Fast-loaded all {effective_loaded} songs**'
             if failed_count > 0:
                 final_msg += f'\n⚠️ Skipped {failed_count} unavailable songs'
                 
