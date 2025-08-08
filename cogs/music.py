@@ -220,7 +220,7 @@ class Music(commands.Cog):
         if not ctx.voice_state.is_playing:
             return await ctx.send('Not playing any music right now...')
 
-        voter = ctx.message.author
+        voter = ctx.author
         if voter == ctx.voice_state.current.requester:
             await ctx.send('⏭️ Skipped')
             ctx.voice_state.skip()
