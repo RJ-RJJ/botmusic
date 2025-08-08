@@ -24,7 +24,7 @@ def get_simple_status_messages():
     server_count = get_server_count()
     
     return [
-        "?help",  # Listening to ?help
+        "/help • /play",  # Listening to /help & /play
         f"{server_count} servers",  # Watching X servers
         "This bot is under development"  # Playing: This bot is under development
     ]
